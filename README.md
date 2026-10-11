@@ -21,6 +21,8 @@ docker compose up -d        # PostgreSQL en localhost:5432 (base de datos crud, 
 ./mvnw test                 # todos los tests (con PostgreSQL en marcha)
 ```
 
+Con cada push, GitHub Actions compila el proyecto y pasa los tests contra un PostgreSQL propio ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): el commit queda marcado en verde o en rojo.
+
 La conexión se puede cambiar con las variables de entorno `DB_URL`, `DB_USERNAME` y `DB_PASSWORD`. La tabla `productos` la crea Hibernate a partir de la entidad (`ddl-auto=update`, solo para desarrollo), y el SQL que genera sale en la consola.
 
 ## Endpoints

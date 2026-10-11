@@ -36,5 +36,6 @@ build/
 .DS_Store
 NOTAS.md
 CLAUDE.md
-.github/
+.github/*
+!.github/workflows/
 docs/apuntes-mvc.html
