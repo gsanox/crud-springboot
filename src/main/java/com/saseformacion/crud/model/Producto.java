@@ -1,6 +1,7 @@
 package com.saseformacion.crud.model;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -28,6 +29,10 @@ public class Producto {
 
 	@Column(nullable = false)
 	private Integer stock;
+
+	// La pone el servicio al crear el producto; el cliente nunca la envía
+	@Column(updatable = false)
+	private LocalDateTime fechaCreacion;
 
 	// JPA necesita un constructor sin argumentos
 	public Producto() {
@@ -78,6 +83,14 @@ public class Producto {
 
 	public void setStock(Integer stock) {
 		this.stock = stock;
+	}
+
+	public LocalDateTime getFechaCreacion() {
+		return fechaCreacion;
+	}
+
+	public void setFechaCreacion(LocalDateTime fechaCreacion) {
+		this.fechaCreacion = fechaCreacion;
 	}
 
 	@Override

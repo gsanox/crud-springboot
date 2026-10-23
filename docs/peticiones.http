@@ -1,0 +1,184 @@
+### Peticiones de ejemplo para las lecciones (docs/lecciones/)
+#
+# Se ejecutan desde IntelliJ (botón ▶ junto a cada petición) o desde VS Code con la
+# extensión "REST Client" (enlace "Send Request"). También se pueden copiar a Postman.
+#
+# Antes: docker compose up -d   y   ./mvnw spring-boot:run
+#
+# Después de crear el producto, cambia @id por el "id" que te devuelva el POST.
+
+@base = http://localhost:8080/api/productos
+@id = 1
+
+
+############################################################
+# Lección 1 · Capa de servicio: reglas de negocio
+############################################################
+
+### Crear un producto → 201
+POST {{base}}
+Content-Type: application/json
+
+{
+  "nombre": "Teclado",
+  "descripcion": "Teclado mecánico",
+  "precio": 49.99,
+  "stock": 10
+}
+
+### Mismo nombre en mayúsculas → 409 "Ya existe un producto con el nombre..."
+POST {{base}}
+Content-Type: application/json
+
+{
+  "nombre": "TECLADO",
+  "precio": 10,
+  "stock": 1
+}
+
+### Vender 4 unidades → 200, el stock baja de 10 a 6
+POST {{base}}/{{id}}/ventas
+Content-Type: application/json
+
+{
+  "cantidad": 4
+}
+
+### Vender más de lo que hay → 409 "Stock insuficiente..."
+POST {{base}}/{{id}}/ventas
+Content-Type: application/json
+
+{
+  "cantidad": 100
+}
+
+### Actualizar sin cambiar el nombre → 200 (su propio nombre no cuenta como duplicado)
+PUT {{base}}/{{id}}
+Content-Type: application/json
+
+{
+  "nombre": "Teclado",
+  "descripcion": "Teclado mecánico retroiluminado",
+  "precio": 54.99,
+  "stock": 6
+}
+
+
+############################################################
+# Lección 2 · DTO y validación
+############################################################
+
+### Intentar colar id y fechaCreacion → se ignoran (ProductoRequest no tiene esos campos)
+### Fíjate también en "disponible": no es una columna de la tabla
+POST {{base}}
+Content-Type: application/json
+
+{
+  "id": 999,
+  "fechaCreacion": "2000-01-01T00:00:00",
+  "nombre": "Ratón",
+  "precio": 19.90,
+  "stock": 0
+}
+
+### Datos no válidos → 400 con un error por campo
+POST {{base}}
+Content-Type: application/json
+
+{
+  "nombre": "",
+  "precio": -5
+}
+
+### Precio con demasiados decimales → 400 (@Digits)
+POST {{base}}
+Content-Type: application/json
+
+{
+  "nombre": "Monitor",
+  "precio": 199.999,
+  "stock": 3
+}
+
+
+############################################################
+# Lección 3 · Mappers
+############################################################
+
+### La respuesta es un ProductoResponse construido por ProductoMapper.toResponse()
+GET {{base}}/{{id}}
+
+### La lista pasa por ProductoMapper.toResponseList()
+GET {{base}}
+
+
+############################################################
+# Lección 4 · Excepciones: todas con el mismo formato
+############################################################
+
+### Producto que no existe → 404
+GET {{base}}/999999
+
+### Id que no es un número → 400
+GET {{base}}/abc
+
+### JSON mal escrito (falta cerrar la llave) → 400
+POST {{base}}
+Content-Type: application/json
+
+{ "nombre": "Ratón"
+
+### Tipo incorrecto en un campo → 400
+POST {{base}}
+Content-Type: application/json
+
+{
+  "nombre": "Ratón",
+  "precio": "caro",
+  "stock": 1
+}
+
+### Cantidad de venta no válida → 400 (VentaRequest)
+POST {{base}}/{{id}}/ventas
+Content-Type: application/json
+
+{
+  "cantidad": 0
+}
+
+### Verbo no permitido en esta URL → 405
+DELETE {{base}}
+
+### URL que no existe → 404
+GET http://localhost:8080/api/no-existe
+
+
+############################################################
+# Lección 5 · Caché (mira la consola de la aplicación)
+############################################################
+
+### 1ª vez → en la consola sale "Consultando la base de datos: producto ..." y el SQL
+GET {{base}}/{{id}}
+
+### 2ª y 3ª vez → no sale nada en la consola: viene de la caché
+GET {{base}}/{{id}}
+
+### Vender actualiza la caché (@CachePut)...
+POST {{base}}/{{id}}/ventas
+Content-Type: application/json
+
+{
+  "cantidad": 1
+}
+
+### ...así que esta lectura sale de la caché pero con el stock ya restado
+GET {{base}}/{{id}}
+
+### La lista también se cachea; se vacía al crear, actualizar, vender o borrar
+GET {{base}}
+
+### Borrar → 204 y la entrada sale de la caché (@CacheEvict)
+DELETE {{base}}/{{id}}
+
+### Ahora sí va a la base de datos (sale el log) → 404
+GET {{base}}/{{id}}
