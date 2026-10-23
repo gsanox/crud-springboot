@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lección 00 · MVC · SASE Formación</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/sase.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html" title="Índice de lecciones"><img src="sase_logo_rectangular.png" alt="SASE Formación"><span>Lección 00 · MVC</span></a>
+    <nav class="nav" aria-label="Secciones">
+      <a href="#que-es">¿Qué es?</a>
+      <a href="#piezas">Las piezas</a>
+      <a href="#flujo">El flujo</a>
+      <a href="#donde">Dónde vive</a>
+      <a href="#conexion">Cómo se conectan</a>
+      <a href="#crud">CRUD ↔ HTTP</a>
+      <a href="#vista">REST vs HTML</a>
+      <a href="#test">Autoevaluación</a>
+      <a href="#resumen">Resumen</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero-band">
+<div class="hero">
+  <div class="kicker">Lección 00 · Spring Boot · Proyecto CRUD de productos</div>
+  <h1>MVC explicado paso a paso</h1>
+  <p class="lead">Qué es MVC, qué hace cada pieza, dónde está en el proyecto y cómo viaja una petición desde Postman hasta PostgreSQL y vuelta. Todo con el código real del proyecto <code>crud</code>.</p>
+  <div class="callout key">
+    <strong>La idea en una frase</strong>
+    Separar la aplicación en piezas con <em>una sola responsabilidad</em> cada una, para que cada parte sea fácil de entender, cambiar y probar por separado.
+  </div>
+  <div class="callout warn">
+    <strong>Esta lección explica la versión básica del CRUD</strong>
+    El controlador recibe y devuelve la entidad <code>Producto</code>, y el 404 sale gracias a <code>@ResponseStatus</code>. Puedes ver <a href="https://github.com/gsanox/crud-springboot/tree/d515b36">el código exacto de esa versión</a>. Las <a href="index.html">lecciones 01 a 05</a> parten de aquí y cambian parte de ese código: servicio, DTO, mappers, excepciones y caché.
+  </div>
+</div>
+</div>
+
+<main>
+
+
+<!-- ================= QUÉ ES ================= -->
+<section id="que-es">
+  <div class="kicker">1 · Concepto</div>
+  <h2>¿Qué es MVC?</h2>
+  <p class="lead">MVC (<em>Modelo-Vista-Controlador</em>) es un <strong>patrón de arquitectura</strong>: una forma acordada de organizar el código. No es una librería ni algo que se instale; es una manera de repartir el trabajo.</p>
+
+  <div class="mvc-trio">
+    <div class="card letter-card" style="--c: var(--c-model); --t: var(--tint-model)">
+      <div class="big">M</div>
+      <div class="name">Modelo</div>
+      <p>Los <strong>datos</strong> y las reglas sobre ellos. Qué es un producto, qué campos tiene, cómo se guarda.</p>
+      <span class="tag">Producto.java (+ servicio y repositorio)</span>
+    </div>
+    <div class="card letter-card" style="--c: var(--c-cliente); --t: var(--tint-cliente)">
+      <div class="big">V</div>
+      <div class="name">Vista</div>
+      <p>Lo que <strong>ve el usuario</strong>: cómo se presentan los datos. En una página web es el HTML; en nuestra API REST es el <strong>JSON</strong> de la respuesta.</p>
+      <span class="tag">JSON (lo genera Spring)</span>
+    </div>
+    <div class="card letter-card" style="--c: var(--c-controller); --t: var(--tint-controller)">
+      <div class="big">C</div>
+      <div class="name">Controlador</div>
+      <p>El <strong>intermediario</strong>: recibe la petición del usuario, pide al modelo lo que haga falta y elige qué vista devolver.</p>
+      <span class="tag">ProductoController.java</span>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <strong>La confusión típica: «¿y el Service y el Repository dónde están en MVC?»</strong>
+    MVC original solo habla de tres piezas. En Spring, la «M» se reparte en varias capas para no tenerlo todo en una clase: el <strong>Service</strong> (lógica de negocio), el <strong>Repository</strong> (acceso a la base de datos) y la <strong>entidad</strong> <code>Producto</code> (los datos). Por eso se dice «MVC + arquitectura en capas» o «Controller-Service-Repository». Son dos ideas que se usan juntas.
+  </div>
+
+  <h3>¿Por qué separar? Un ejemplo sin MVC</h3>
+  <p>Imagina un único método que lee la URL, abre la conexión a PostgreSQL, escribe el SQL, comprueba si el producto existe, monta el JSON a mano y lo devuelve. Funciona… hasta que quieres cambiar de base de datos, añadir una regla («no se puede vender con stock 0») o probar solo una parte. Entonces hay que tocarlo todo. Con capas, <strong>cada cambio afecta a una sola pieza</strong>.</p>
+</section>
+
+<!-- ================= PIEZAS ================= -->
+<section id="piezas">
+  <div class="kicker">2 · Las piezas</div>
+  <h2>Qué hace cada parte (y qué NO debe hacer)</h2>
+  <p class="lead">La analogía del restaurante ayuda mucho: cada persona tiene un trabajo y no se mete en el de los demás.</p>
+
+  <div class="grid cols-2" style="margin-top:16px">
+    <div class="card layer-card" style="--c: var(--c-cliente)">
+      <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg> Cliente <small>Postman, navegador, app móvil…</small></h3>
+      <p class="analogy"><span class="tag-mono">Restaurante</span>El comensal: pide un plato y espera a que se lo traigan.</p>
+      <p>Envía una <strong>petición HTTP</strong> (verbo + URL + a veces un JSON) y recibe una <strong>respuesta</strong> (código de estado + JSON). No sabe nada de Java ni de la base de datos.</p>
+    </div>
+
+    <div class="card layer-card" style="--c: var(--c-controller)">
+      <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M4 17h5M19 7h1M15 17h5"/><circle cx="16" cy="7" r="3"/><circle cx="12" cy="17" r="3"/></svg> Controller <small>@RestController</small></h3>
+      <p class="analogy"><span class="tag-mono">Restaurante</span>El camarero: toma nota del pedido, lo pasa a cocina y trae el plato. No cocina.</p>
+      <ul>
+        <li><span class="do">Sí:</span> decir qué URL atiende cada método, leer datos de la petición (<code>@PathVariable</code>, <code>@RequestBody</code>), elegir el código HTTP.</li>
+        <li><span class="dont">No:</span> lógica de negocio ni acceder a la base de datos. Nunca usa el repositorio directamente.</li>
+      </ul>
+    </div>
+
+    <div class="card layer-card" style="--c: var(--c-service)">
+      <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg> Service <small>@Service</small></h3>
+      <p class="analogy"><span class="tag-mono">Restaurante</span>El cocinero: sabe la receta y decide cómo se prepara cada plato.</p>
+      <ul>
+        <li><span class="do">Sí:</span> la <strong>lógica de negocio</strong> (las reglas): «si no existe, error», «el id lo pone la base de datos», validaciones, cálculos. Las transacciones (<code>@Transactional</code>).</li>
+        <li><span class="dont">No:</span> saber nada de HTTP (URLs, códigos 200/404, JSON).</li>
+      </ul>
+    </div>
+
+    <div class="card layer-card" style="--c: var(--c-repository)">
+      <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg> Repository <small>@Repository · JpaRepository</small></h3>
+      <p class="analogy"><span class="tag-mono">Restaurante</span>El encargado del almacén: trae y guarda ingredientes, sin preguntar para qué.</p>
+      <ul>
+        <li><span class="do">Sí:</span> guardar, buscar, actualizar y borrar en la base de datos. Spring Data JPA <strong>escribe el código por nosotros</strong>: solo declaramos la interfaz.</li>
+        <li><span class="dont">No:</span> decidir reglas de negocio.</li>
+      </ul>
+    </div>
+
+    <div class="card layer-card" style="--c: var(--c-model)">
+      <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5-9 4.5-9-4.5z"/><path d="M3 7.5v9L12 21l9-4.5v-9M12 12v9"/></svg> Modelo / Entidad <small>@Entity</small></h3>
+      <p class="analogy"><span class="tag-mono">Restaurante</span>Los ingredientes y el plato: lo que pasa de mano en mano.</p>
+      <p><code>Producto</code> es una clase Java normal con anotaciones que dicen cómo se guarda en una tabla: cada objeto es una <strong>fila</strong> y cada atributo una <strong>columna</strong>. <strong>Viaja por todas las capas.</strong></p>
+    </div>
+
+    <div class="card layer-card" style="--c: var(--c-bd)">
+      <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg> Base de datos <small>PostgreSQL en Docker</small></h3>
+      <p class="analogy"><span class="tag-mono">Restaurante</span>La despensa: donde se guarda todo, aunque se cierre el restaurante.</p>
+      <p>Guarda los datos de forma permanente en la tabla <code>productos</code>. Solo habla SQL. Hibernate (dentro de JPA) traduce entre objetos Java y SQL.</p>
+    </div>
+  </div>
+
+  <div class="callout key">
+    <strong>La regla de oro de las capas</strong>
+    Cada capa <strong>solo habla con la de al lado</strong>, y siempre en el mismo sentido: Controller → Service → Repository → BD. Las respuestas vuelven por el mismo camino al revés. Nadie se salta una capa.
+  </div>
+</section>
+
+<!-- ================= FLUJO ANIMADO ================= -->
+<section id="flujo">
+  <div class="kicker">3 · El flujo</div>
+  <h2>El viaje de una petición, paso a paso</h2>
+  <p class="lead">Elige una operación y pulsa <strong>Siguiente</strong> (o <strong>Reproducir</strong>). Fíjate en qué viaja entre capas en cada momento: primero texto HTTP, luego objetos Java, luego SQL… y de vuelta.</p>
+
+  <div class="flow-wrap">
+    <div class="scenarios" role="group" aria-label="Operación">
+      <button class="chip-btn" data-scn="buscar" aria-pressed="true" type="button"><span class="verb">GET</span> Buscar producto 7</button>
+      <button class="chip-btn" data-scn="crear" aria-pressed="false" type="button"><span class="verb">POST</span> Crear producto</button>
+      <button class="chip-btn" data-scn="error" aria-pressed="false" type="button"><span class="verb">GET</span> Producto 99 (no existe)</button>
+      <button class="chip-btn" data-scn="borrar" aria-pressed="false" type="button"><span class="verb">DELETE</span> Borrar producto 7</button>
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="lanes" id="lanes">
+        <div class="rail" aria-hidden="true"></div>
+        <div class="node" data-node="cliente" style="--c: var(--c-cliente); --t: var(--tint-cliente)">
+          <span class="zone">Fuera de la app</span>
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></div><div class="text"><div class="title">Cliente</div><div class="sub">Postman / navegador</div></div>
+        </div>
+        <div class="node" data-node="controller" style="--c: var(--c-controller); --t: var(--tint-controller)">
+          <span class="zone">Spring Boot</span>
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M4 17h5M19 7h1M15 17h5"/><circle cx="16" cy="7" r="3"/><circle cx="12" cy="17" r="3"/></svg></div><div class="text"><div class="title">Controller</div><div class="sub">ProductoController</div></div>
+        </div>
+        <div class="node" data-node="service" style="--c: var(--c-service); --t: var(--tint-service)">
+          <span class="zone">Spring Boot</span>
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></div><div class="text"><div class="title">Service</div><div class="sub">ProductoService</div></div>
+        </div>
+        <div class="node" data-node="repository" style="--c: var(--c-repository); --t: var(--tint-repository)">
+          <span class="zone">Spring Boot</span>
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg></div><div class="text"><div class="title">Repository</div><div class="sub">ProductoRepository</div></div>
+        </div>
+        <div class="node" data-node="bd" style="--c: var(--c-bd); --t: var(--tint-bd)">
+          <span class="zone">Docker</span>
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></div><div class="text"><div class="title">PostgreSQL</div><div class="sub">tabla productos</div></div>
+        </div>
+      </div>
+      <div class="packet hidden" id="packet" aria-hidden="true"></div>
+      <div class="dir-legend">
+        <span style="--dot: var(--req)">Petición (va hacia la BD)</span>
+        <span style="--dot: var(--ok)">Respuesta (vuelve al cliente)</span>
+        <span style="--dot: var(--err)">Error</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="prevBtn" type="button">← Anterior</button>
+      <button class="btn cta" id="nextBtn" type="button">Siguiente →</button>
+      <button class="btn" id="playBtn" type="button">▶ Reproducir</button>
+      <button class="btn" id="resetBtn" type="button">↺ Reiniciar</button>
+      <span class="step-count" id="stepCount" aria-live="polite"></span>
+    </div>
+
+    <div class="explain">
+      <div class="card explain-text" id="explainText" aria-live="polite"></div>
+      <div class="code" id="explainCode"></div>
+    </div>
+
+    <ol class="timeline" id="timeline"></ol>
+  </div>
+</section>
+
+<!-- ================= DÓNDE VIVE ================= -->
+<section id="donde">
+  <div class="kicker">4 · Dónde vive cada parte</div>
+  <h2>Cada capa tiene su carpeta (paquete)</h2>
+  <p class="lead">Pulsa un fichero para ver qué es y su código. El nombre del paquete ya te dice qué capa es: si buscas dónde se atiende una URL, ve a <code>controller</code>; si buscas una regla de negocio, a <code>service</code>.</p>
+
+  <div class="explorer">
+    <div class="card tree" id="tree"></div>
+    <div class="grid" style="align-content:start">
+      <div class="card file-info" id="fileInfo"></div>
+      <div class="code" id="fileCode"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CONEXIÓN / DI ================= -->
+<section id="conexion">
+  <div class="kicker">5 · Cómo se conectan</div>
+  <h2>¿Quién crea los objetos? Spring (inyección de dependencias)</h2>
+  <p class="lead">Nunca escribimos <code>new ProductoService()</code>. Al arrancar, Spring busca las clases con anotaciones, crea un objeto de cada una (un <strong>bean</strong>) y le pasa por el constructor las piezas que necesita. A esto se le llama <strong>inyección de dependencias</strong>.</p>
+
+  <div class="controls">
+    <button class="btn primary" id="bootBtn" type="button">▶ Arrancar la aplicación</button>
+    <button class="btn" id="bootReset" type="button">↺ Reiniciar</button>
+  </div>
+
+  <div class="boot">
+    <ol class="boot-log" id="bootLog">
+      <li>1. <code>main()</code> llama a <code>SpringApplication.run(...)</code>. Spring escanea el paquete <code>com.saseformacion.crud</code> y sus subpaquetes buscando anotaciones.</li>
+      <li>2. Encuentra <code>@Repository</code> en una <em>interfaz</em>. Spring Data JPA genera una clase que la implementa y crea el objeto.</li>
+      <li>3. Encuentra <code>@Service</code>. Su constructor pide un <code>ProductoRepository</code>… ¡ya lo tiene! Lo crea pasándoselo.</li>
+      <li>4. Encuentra <code>@RestController</code>. Su constructor pide un <code>ProductoService</code>. Lo crea pasándoselo.</li>
+      <li>5. Arranca Tomcat (el servidor web) en el puerto <code>8080</code>. La aplicación ya puede recibir peticiones.</li>
+    </ol>
+    <div class="container-box" id="beanBox">
+      <span class="label">Contenedor de Spring (los beans)</span>
+      <div class="bean" data-b="2" style="--c: var(--c-repository); --t: var(--tint-repository)"><b>productoRepository</b> <span class="needs">no necesita nada (lo genera Spring Data)</span></div>
+      <div class="bean" data-b="3" style="--c: var(--c-service); --t: var(--tint-service)"><b>productoService</b> <span class="needs">new ProductoService(productoRepository)</span></div>
+      <div class="bean" data-b="4" style="--c: var(--c-controller); --t: var(--tint-controller)"><b>productoController</b> <span class="needs">new ProductoController(productoService)</span></div>
+      <div class="bean" data-b="5" style="--c: var(--c-cliente); --t: var(--tint-cliente)"><b>Tomcat :8080</b> <span class="needs">escuchando peticiones HTTP…</span></div>
+    </div>
+  </div>
+
+  <h3>Así se ve en el código</h3>
+  <div class="grid cols-2">
+    <div class="code"><div class="file">controller/ProductoController.java</div><pre><span class="ln">private final ProductoService productoService;</span><span class="ln"></span><span class="ln hl">public ProductoController(ProductoService productoService) {</span><span class="ln">    this.productoService = productoService;</span><span class="ln">}</span></pre></div>
+    <div class="code"><div class="file">service/ProductoService.java</div><pre><span class="ln">private final ProductoRepository productoRepository;</span><span class="ln"></span><span class="ln hl">public ProductoService(ProductoRepository productoRepository) {</span><span class="ln">    this.productoRepository = productoRepository;</span><span class="ln">}</span></pre></div>
+  </div>
+  <div class="callout">
+    <strong>¿Por qué por constructor?</strong>
+    Porque así se ve claramente qué necesita cada clase para funcionar, el campo puede ser <code>final</code> (no cambia nunca) y en los tests podemos pasarle una pieza falsa (un <em>mock</em>). También existe <code>@Autowired</code> encima del campo, que verás en muchos tutoriales, pero se recomienda el constructor.
+  </div>
+</section>
+
+<!-- ================= CRUD ↔ HTTP ================= -->
+<section id="crud">
+  <div class="kicker">6 · Chuleta</div>
+  <h2>CRUD ↔ HTTP ↔ capas ↔ SQL</h2>
+  <p class="lead">La misma operación tiene un nombre distinto en cada capa. Esta tabla es para tenerla a mano.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>CRUD</th><th>HTTP</th><th>URL</th><th>Controller</th><th>Service</th><th>Repository</th><th>SQL</th><th>Respuesta</th></tr></thead>
+      <tbody>
+        <tr><td>Leer todos</td><td><span class="verb-tag v-get">GET</span></td><td><code>/api/productos</code></td><td><code>listar()</code></td><td><code>listar()</code></td><td><code>findAll()</code></td><td><code>SELECT</code></td><td>200 OK</td></tr>
+        <tr><td>Leer uno</td><td><span class="verb-tag v-get">GET</span></td><td><code>/api/productos/7</code></td><td><code>buscarPorId(7)</code></td><td><code>buscarPorId(7)</code></td><td><code>findById(7)</code></td><td><code>SELECT … WHERE id=7</code></td><td>200 OK · 404</td></tr>
+        <tr><td>Crear</td><td><span class="verb-tag v-post">POST</span></td><td><code>/api/productos</code> + JSON</td><td><code>crear(producto)</code></td><td><code>crear(producto)</code></td><td><code>save(producto)</code></td><td><code>INSERT</code></td><td>201 Created</td></tr>
+        <tr><td>Actualizar</td><td><span class="verb-tag v-put">PUT</span></td><td><code>/api/productos/7</code> + JSON</td><td><code>actualizar(7, datos)</code></td><td><code>actualizar(7, datos)</code></td><td><code>findById</code> + <code>save</code></td><td><code>SELECT</code> + <code>UPDATE</code></td><td>200 OK · 404</td></tr>
+        <tr><td>Borrar</td><td><span class="verb-tag v-del">DELETE</span></td><td><code>/api/productos/7</code></td><td><code>eliminar(7)</code></td><td><code>eliminar(7)</code></td><td><code>existsById</code> + <code>deleteById</code></td><td><code>DELETE</code></td><td>204 No Content · 404</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Anotaciones que verás en clase</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Anotación</th><th>Capa</th><th>Qué significa</th></tr></thead>
+      <tbody>
+        <tr><td><code>@RestController</code></td><td>Controller</td><td>Esta clase atiende peticiones HTTP y lo que devuelvan sus métodos se convierte en JSON.</td></tr>
+        <tr><td><code>@RequestMapping("/api/productos")</code></td><td>Controller</td><td>Prefijo común de las URLs de toda la clase.</td></tr>
+        <tr><td><code>@GetMapping</code> <code>@PostMapping</code> <code>@PutMapping</code> <code>@DeleteMapping</code></td><td>Controller</td><td>Qué verbo HTTP (y ruta) atiende cada método.</td></tr>
+        <tr><td><code>@PathVariable</code></td><td>Controller</td><td>Saca un valor de la URL: el <code>7</code> de <code>/api/productos/7</code>.</td></tr>
+        <tr><td><code>@RequestBody</code></td><td>Controller</td><td>Convierte el JSON del cuerpo de la petición en un objeto Java.</td></tr>
+        <tr><td><code>@ResponseStatus</code></td><td>Controller / excepción</td><td>Qué código HTTP devolver (201, 204, 404…).</td></tr>
+        <tr><td><code>@Service</code></td><td>Service</td><td>Clase de lógica de negocio. Spring crea un objeto de ella.</td></tr>
+        <tr><td><code>@Transactional</code></td><td>Service</td><td>Todo lo que hace el método va en una transacción: o se guarda todo, o nada.</td></tr>
+        <tr><td><code>@Repository</code></td><td>Repository</td><td>Acceso a datos. Con <code>JpaRepository</code>, Spring genera los métodos.</td></tr>
+        <tr><td><code>@Entity</code> <code>@Table</code></td><td>Modelo</td><td>Esta clase se guarda en una tabla de la base de datos.</td></tr>
+        <tr><td><code>@Id</code> <code>@GeneratedValue</code></td><td>Modelo</td><td>Clave primaria, y la genera la base de datos automáticamente.</td></tr>
+        <tr><td><code>@Column</code></td><td>Modelo</td><td>Detalles de la columna: obligatoria, longitud máxima…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Códigos de estado HTTP que usamos</h3>
+  <div class="grid cols-3">
+    <div class="card status-card s-ok"><b>200 OK</b>Todo bien, aquí tienes los datos.</div>
+    <div class="card status-card s-ok"><b>201 Created</b>He creado lo que me has mandado.</div>
+    <div class="card status-card s-ok"><b>204 No Content</b>Hecho (borrado), no hay nada que devolver.</div>
+    <div class="card status-card s-client"><b>400 Bad Request</b>Tu petición está mal (datos inválidos). <em>Error del cliente.</em></div>
+    <div class="card status-card s-client"><b>404 Not Found</b>Eso que pides no existe. <em>Error del cliente.</em></div>
+    <div class="card status-card s-server"><b>500 Internal Server Error</b>Algo ha fallado en el servidor. <em>Error nuestro.</em></div>
+  </div>
+  <p style="color:var(--muted);font-size:.92rem">Truco: <strong>2xx</strong> = éxito · <strong>4xx</strong> = el cliente se ha equivocado · <strong>5xx</strong> = el servidor se ha equivocado.</p>
+</section>
+
+<!-- ================= VISTA ================= -->
+<section id="vista" class="compare">
+  <div class="kicker">7 · La «V» de MVC</div>
+  <h2>API REST (nuestro proyecto) vs. MVC con páginas HTML</h2>
+  <p class="lead">El Controller, el Service y el Repository son iguales en los dos casos. Lo único que cambia es <strong>qué devuelve el controlador</strong>, es decir, la Vista.</p>
+  <div class="grid cols-2" style="margin-top:14px">
+    <div class="card">
+      <h3>API REST · <code>@RestController</code></h3>
+      <p>Devuelve <strong>datos en JSON</strong>. Quien los muestre bonitos (una web en JavaScript, una app Android, Postman…) es otro programa.</p>
+      <div class="mini-flow">
+        <span style="--c:var(--c-controller);--t:var(--tint-controller)">Controller</span><i>→ devuelve</i>
+        <span style="--c:var(--c-model);--t:var(--tint-model)">Producto</span><i>→ Spring lo convierte en</i>
+        <span style="--c:var(--c-cliente);--t:var(--tint-cliente)">JSON</span>
+      </div>
+      <div class="code"><pre><span class="ln">{ "id": 7, "nombre": "Teclado", "precio": 49.99 }</span></pre></div>
+      <p style="margin-top:10px"><strong>✔ Es lo que tenemos ahora.</strong></p>
+    </div>
+    <div class="card">
+      <h3>MVC clásico · <code>@Controller</code> + Thymeleaf</h3>
+      <p>Devuelve el <strong>nombre de una plantilla HTML</strong> y mete los datos en un <code>Model</code>. El servidor genera la página completa.</p>
+      <div class="mini-flow">
+        <span style="--c:var(--c-controller);--t:var(--tint-controller)">Controller</span><i>→ devuelve</i>
+        <span style="--c:var(--c-model);--t:var(--tint-model)">"productos/lista"</span><i>→ Thymeleaf genera</i>
+        <span style="--c:var(--c-cliente);--t:var(--tint-cliente)">HTML</span>
+      </div>
+      <div class="code"><pre><span class="ln">model.addAttribute("productos", lista);</span><span class="ln">return "productos/lista";  // templates/productos/lista.html</span></pre></div>
+      <p style="margin-top:10px">Necesitaría añadir la dependencia Thymeleaf.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= TEST ================= -->
+<section id="test">
+  <div class="kicker">8 · Autoevaluación</div>
+  <h2>¿Lo has pillado? Comprueba</h2>
+  <p class="lead">Pulsa una respuesta. Si fallas, lee la explicación: es donde más se aprende. <span class="score" id="score"></span></p>
+  <div class="quiz" id="quiz"></div>
+</section>
+
+<!-- ================= RESUMEN ================= -->
+<section id="resumen" class="summary">
+  <div class="kicker">9 · Para repasar antes del examen</div>
+  <h2>Si solo te quedas con 7 ideas</h2>
+  <div class="card">
+    <ol>
+      <li><strong>MVC</strong> separa la aplicación en Modelo (datos), Vista (lo que se muestra) y Controlador (intermediario).</li>
+      <li>En Spring, la «M» se divide en capas: <strong>Service</strong> (reglas de negocio) y <strong>Repository</strong> (base de datos), más la <strong>entidad</strong> con los datos.</li>
+      <li>El flujo siempre es <strong>Cliente → Controller → Service → Repository → BD</strong>, y la respuesta vuelve por el mismo camino.</li>
+      <li>Cada capa <strong>solo habla con la siguiente</strong>. El controlador nunca toca el repositorio.</li>
+      <li>El <strong>controlador traduce HTTP ↔ Java</strong>; el <strong>repositorio traduce Java ↔ SQL</strong> (gracias a JPA/Hibernate).</li>
+      <li><strong>Spring crea los objetos</strong> y los conecta por el constructor (inyección de dependencias). Nosotros nunca hacemos <code>new</code> de un servicio o un repositorio.</li>
+      <li>En una API REST la <strong>Vista es el JSON</strong>; con Thymeleaf sería una página HTML.</li>
+    </ol>
+  </div>
+
+  <h3>Glosario rápido</h3>
+  <div class="card">
+    <dl class="gloss">
+      <dt>Petición HTTP</dt><dd>Mensaje que envía el cliente: verbo (GET, POST…) + URL + cabeceras + cuerpo opcional.</dd>
+      <dt>Endpoint</dt><dd>Una combinación de verbo + URL que atiende la API, p. ej. <code>GET /api/productos/{id}</code>.</dd>
+      <dt>JSON</dt><dd>Formato de texto para intercambiar datos: <code>{"nombre": "Teclado"}</code>.</dd>
+      <dt>Bean</dt><dd>Objeto que crea y gestiona Spring (controladores, servicios, repositorios…).</dd>
+      <dt>Inyección de dependencias</dt><dd>Spring le pasa a cada clase los objetos que necesita, en vez de crearlos ella.</dd>
+      <dt>Entidad</dt><dd>Clase Java que representa una tabla. Un objeto = una fila.</dd>
+      <dt>JPA / Hibernate</dt><dd>JPA es la especificación para guardar objetos en BD; Hibernate es la implementación que genera el SQL.</dd>
+      <dt>Spring Data JPA</dt><dd>Genera automáticamente la implementación de los repositorios a partir de la interfaz.</dd>
+      <dt>Transacción</dt><dd>Grupo de operaciones en BD que se hacen todas o ninguna.</dd>
+      <dt>Lógica de negocio</dt><dd>Las reglas propias del problema: «no se puede crear un producto con precio negativo».</dd>
+    </dl>
+  </div>
+</section>
+
+<nav class="lesson-nav" id="lessonNav" aria-label="Lecciones"></nav>
+
+</main>
+
+<footer>Apuntes para el proyecto <code>crud</code> (Spring Boot 4 · PostgreSQL) · DAM<br><a href="https://saseformacion.es">sase<span>_</span> Formación</a> · saseformacion.es</footer>
+
+<script src="assets/lecciones.js"></script>
+<script>
+/* LAYER y renderCode vienen de assets/lecciones.js */
+/* ---------------- fragmentos de código reales ---------------- */
+const CODE = {
+  ctrlGet: {
+    file: 'controller/ProductoController.java',
+    lines: [
+      '@RestController',
+      '@RequestMapping("/api/productos")',
+      'public class ProductoController {',
+      '',
+      '    // GET /api/productos/7',
+      '    @GetMapping("/{id}")',
+      '    public Producto buscarPorId(@PathVariable Long id) {',
+      '        return productoService.buscarPorId(id);',
+      '    }',
+      '}'
+    ]
+  },
+  ctrlPost: {
+    file: 'controller/ProductoController.java',
+    lines: [
+      '@RestController',
+      '@RequestMapping("/api/productos")',
+      'public class ProductoController {',
+      '',
+      '    @PostMapping',
+      '    @ResponseStatus(HttpStatus.CREATED)',
+      '    public Producto crear(@RequestBody Producto producto) {',
+      '        return productoService.crear(producto);',
+      '    }',
+      '}'
+    ]
+  },
+  ctrlDelete: {
+    file: 'controller/ProductoController.java',
+    lines: [
+      '@RestController',
+      '@RequestMapping("/api/productos")',
+      'public class ProductoController {',
+      '',
+      '    @DeleteMapping("/{id}")',
+      '    @ResponseStatus(HttpStatus.NO_CONTENT)',
+      '    public void eliminar(@PathVariable Long id) {',
+      '        productoService.eliminar(id);',
+      '    }',
+      '}'
+    ]
+  },
+  svcBuscar: {
+    file: 'service/ProductoService.java',
+    lines: [
+      '@Service',
+      'public class ProductoService {',
+      '',
+      '    @Transactional(readOnly = true)',
+      '    public Producto buscarPorId(Long id) {',
+      '        return productoRepository.findById(id)',
+      '                .orElseThrow(() -> new ProductoNoEncontradoException(id));',
+      '    }',
+      '}'
+    ]
+  },
+  svcCrear: {
+    file: 'service/ProductoService.java',
+    lines: [
+      '@Service',
+      'public class ProductoService {',
+      '',
+      '    @Transactional',
+      '    public Producto crear(Producto producto) {',
+      '        // El id lo genera la base de datos; si viene informado se ignora',
+      '        producto.setId(null);',
+      '        return productoRepository.save(producto);',
+      '    }',
+      '}'
+    ]
+  },
+  svcEliminar: {
+    file: 'service/ProductoService.java',
+    lines: [
+      '@Service',
+      'public class ProductoService {',
+      '',
+      '    @Transactional',
+      '    public void eliminar(Long id) {',
+      '        if (!productoRepository.existsById(id)) {',
+      '            throw new ProductoNoEncontradoException(id);',
+      '        }',
+      '        productoRepository.deleteById(id);',
+      '    }',
+      '}'
+    ]
+  },
+  repo: {
+    file: 'repository/ProductoRepository.java',
+    lines: [
+      '@Repository',
+      'public interface ProductoRepository',
+      '        extends JpaRepository<Producto, Long> {',
+      '',
+      '    // ¡Vacía! findAll, findById, save, deleteById, existsById…',
+      '    // los genera Spring Data JPA automáticamente',
+      '}'
+    ]
+  },
+  entity: {
+    file: 'model/Producto.java  (resumido)',
+    lines: [
+      '@Entity',
+      '@Table(name = "productos")',
+      'public class Producto {',
+      '',
+      '    @Id',
+      '    @GeneratedValue(strategy = GenerationType.IDENTITY)',
+      '    private Long id;',
+      '',
+      '    @Column(nullable = false, length = 100)',
+      '    private String nombre;',
+      '',
+      '    @Column(length = 500)',
+      '    private String descripcion;',
+      '',
+      '    @Column(nullable = false, precision = 10, scale = 2)',
+      '    private BigDecimal precio;',
+      '',
+      '    @Column(nullable = false)',
+      '    private Integer stock;',
+      '',
+      '    // constructores, getters y setters…',
+      '}'
+    ]
+  },
+  excepcion: {
+    file: 'exception/ProductoNoEncontradoException.java',
+    lines: [
+      '// Si llega al controlador sin capturar, Spring responde con un 404 Not Found',
+      '@ResponseStatus(HttpStatus.NOT_FOUND)',
+      'public class ProductoNoEncontradoException extends RuntimeException {',
+      '',
+      '    public ProductoNoEncontradoException(Long id) {',
+      '        super("No existe ningún producto con id " + id);',
+      '    }',
+      '}'
+    ]
+  }
+};
+
+const PLAIN = (file, lines) => ({ file, lines });
+
+/* ---------------- escenarios del flujo ---------------- */
+const SCENARIOS = {
+  buscar: [
+    { from: 'cliente', to: 'controller', kind: 'req', packet: 'GET /api/productos/7', at: 'controller',
+      title: 'El cliente envía una petición HTTP',
+      text: 'Postman envía <code>GET /api/productos/7</code>. <strong>GET</strong> significa «quiero leer» y la URL dice qué: el producto 7. Spring mira las anotaciones de los controladores y encuentra el método que encaja: <code>@RequestMapping("/api/productos")</code> + <code>@GetMapping("/{id}")</code>.',
+      code: CODE.ctrlGet, hl: [1, 5] },
+    { from: 'controller', to: 'service', kind: 'req', packet: 'buscarPorId(7)', at: 'controller',
+      title: 'El controlador pasa el pedido al servicio',
+      text: '<code>@PathVariable</code> saca el <code>7</code> de la URL y lo convierte en un <code>Long</code>. A partir de aquí <strong>ya no hay HTTP</strong>: solo una llamada normal a un método Java. El controlador no sabe buscar productos; se lo pide al servicio.',
+      code: CODE.ctrlGet, hl: [6, 7] },
+    { from: 'service', to: 'repository', kind: 'req', packet: 'findById(7)', at: 'service',
+      title: 'El servicio pide el producto al repositorio',
+      text: 'El servicio es donde están las reglas de negocio. Aquí la regla es sencilla: «búscalo y, si no existe, error». Para buscarlo usa el repositorio.',
+      code: CODE.svcBuscar, hl: [4, 5] },
+    { from: 'repository', to: 'bd', kind: 'req', packet: 'SELECT … WHERE id = 7', at: 'repository',
+      title: 'El repositorio traduce a SQL',
+      text: 'Nosotros no hemos escrito <code>findById</code>: lo da <code>JpaRepository</code>. Hibernate lo convierte en una consulta SQL y la envía a PostgreSQL. (Con <code>show-sql=true</code> la ves en la consola.)',
+      code: PLAIN('SQL generado por Hibernate', ['select p.id, p.descripcion, p.nombre, p.precio, p.stock', 'from productos p', 'where p.id = ?   -- ? = 7']), hl: [2] },
+    { from: 'bd', to: 'repository', kind: 'res', packet: '1 fila', at: 'bd',
+      title: 'PostgreSQL devuelve la fila',
+      text: 'La base de datos solo entiende de tablas y filas. Devuelve la fila encontrada.',
+      code: PLAIN('Resultado en la tabla productos', [' id | nombre  | descripcion      | precio | stock', '----+---------+------------------+--------+------', '  7 | Teclado | Teclado mecánico |  49.99 |    10']), hl: [2] },
+    { from: 'repository', to: 'service', kind: 'res', packet: 'Optional<Producto>', at: 'repository',
+      title: 'La fila se convierte en un objeto Java (el Modelo)',
+      text: 'Hibernate crea un objeto <code>Producto</code> y rellena sus atributos con las columnas de la fila. Viene dentro de un <code>Optional</code> («caja que puede estar vacía») porque el producto podría no existir.',
+      code: CODE.entity, hl: [0, 1, 6, 9] },
+    { from: 'service', to: 'controller', kind: 'res', packet: 'Producto', at: 'service',
+      title: 'El servicio devuelve el producto',
+      text: 'Como la caja no está vacía, <code>orElseThrow</code> saca el <code>Producto</code> y lo devuelve. Si estuviera vacía lanzaría la excepción (mira el escenario «Producto 99»).',
+      code: CODE.svcBuscar, hl: [6] },
+    { from: 'controller', to: 'cliente', kind: 'res', packet: '200 OK + JSON', at: 'controller',
+      title: 'Spring convierte el objeto en JSON: ¡la Vista!',
+      text: 'El controlador devuelve el <code>Producto</code> y Spring (con la librería Jackson) lo convierte en JSON automáticamente, porque es un <code>@RestController</code>. En una API REST <strong>este JSON es la «V» de MVC</strong>.',
+      code: PLAIN('Respuesta HTTP', ['HTTP/1.1 200 OK', 'Content-Type: application/json', '', '{', '  "id": 7,', '  "nombre": "Teclado",', '  "descripcion": "Teclado mecánico",', '  "precio": 49.99,', '  "stock": 10', '}']), hl: [0] }
+  ],
+
+  crear: [
+    { from: 'cliente', to: 'controller', kind: 'req', packet: 'POST /api/productos + JSON', at: 'controller',
+      title: 'El cliente envía un producto nuevo en JSON',
+      text: '<strong>POST</strong> significa «crea esto». El producto va en el <strong>cuerpo</strong> de la petición, en formato JSON. Fíjate en que no lleva <code>id</code>: aún no existe.',
+      code: PLAIN('Petición HTTP', ['POST /api/productos', 'Content-Type: application/json', '', '{', '  "nombre": "Ratón",', '  "descripcion": "Ratón inalámbrico",', '  "precio": 19.90,', '  "stock": 25', '}']), hl: [0] },
+    { from: 'controller', to: 'service', kind: 'req', packet: 'crear(producto)', at: 'controller',
+      title: '@RequestBody convierte el JSON en un objeto',
+      text: 'Spring lee el JSON del cuerpo y crea un objeto <code>Producto</code> con esos valores (el <code>id</code> queda a <code>null</code>). El controlador se lo pasa al servicio.',
+      code: CODE.ctrlPost, hl: [4, 6, 7] },
+    { from: 'service', to: 'repository', kind: 'req', packet: 'save(producto)', at: 'service',
+      title: 'El servicio aplica sus reglas y pide guardarlo',
+      text: 'Regla de negocio: <strong>el id lo decide la base de datos</strong>. Por si el cliente envió uno, lo borramos con <code>setId(null)</code> (así nadie puede sobrescribir un producto existente). Luego llama a <code>save</code>.',
+      code: CODE.svcCrear, hl: [6, 7] },
+    { from: 'repository', to: 'bd', kind: 'req', packet: 'INSERT INTO productos …', at: 'repository',
+      title: 'save() con id nulo = INSERT',
+      text: '<code>save</code> sirve para crear y para actualizar. Como el <code>id</code> es <code>null</code>, Hibernate sabe que es nuevo y genera un <code>INSERT</code>.',
+      code: PLAIN('SQL generado por Hibernate', ['insert into productos (descripcion, nombre, precio, stock)', 'values (?, ?, ?, ?)']), hl: [0] },
+    { from: 'bd', to: 'repository', kind: 'res', packet: 'id = 8 generado', at: 'bd',
+      title: 'PostgreSQL guarda la fila y genera el id',
+      text: 'La columna <code>id</code> es autoincremental (<code>@GeneratedValue(strategy = IDENTITY)</code>). PostgreSQL le asigna el siguiente número libre.',
+      code: PLAIN('Tabla productos', [' id | nombre | descripcion       | precio | stock', '----+--------+-------------------+--------+------', '  8 | Ratón  | Ratón inalámbrico |  19.90 |    25   ← nueva']), hl: [2] },
+    { from: 'repository', to: 'service', kind: 'res', packet: 'Producto (id = 8)', at: 'repository',
+      title: 'El objeto vuelve ya con su id',
+      text: 'Hibernate rellena el <code>id</code> del objeto con el valor generado y lo devuelve.',
+      code: CODE.entity, hl: [4, 5, 6] },
+    { from: 'service', to: 'controller', kind: 'res', packet: 'Producto (id = 8)', at: 'service',
+      title: 'El servicio lo devuelve al controlador',
+      text: 'Al terminar el método, <code>@Transactional</code> confirma la transacción: el cambio queda guardado definitivamente.',
+      code: CODE.svcCrear, hl: [3, 7] },
+    { from: 'controller', to: 'cliente', kind: 'res', packet: '201 Created + JSON', at: 'controller',
+      title: 'Respuesta 201 Created',
+      text: '<code>@ResponseStatus(HttpStatus.CREATED)</code> hace que la respuesta sea <strong>201</strong> en vez de 200, que es lo correcto al crear. El cliente recibe el producto con el <code>id</code> que se le ha asignado.',
+      code: PLAIN('Respuesta HTTP', ['HTTP/1.1 201 Created', 'Content-Type: application/json', '', '{ "id": 8, "nombre": "Ratón", "descripcion": "Ratón inalámbrico",', '  "precio": 19.90, "stock": 25 }']), hl: [0] }
+  ],
+
+  error: [
+    { from: 'cliente', to: 'controller', kind: 'req', packet: 'GET /api/productos/99', at: 'controller',
+      title: 'Se pide un producto que no existe',
+      text: 'Misma petición que antes, pero con el id <code>99</code>, que no está en la tabla. El viaje de ida es idéntico.',
+      code: CODE.ctrlGet, hl: [5, 6] },
+    { from: 'controller', to: 'service', kind: 'req', packet: 'buscarPorId(99)', at: 'controller',
+      title: 'Controller → Service',
+      text: 'El controlador no comprueba nada: no es su trabajo. Simplemente llama al servicio.',
+      code: CODE.ctrlGet, hl: [7] },
+    { from: 'service', to: 'repository', kind: 'req', packet: 'findById(99)', at: 'service',
+      title: 'Service → Repository',
+      text: 'El servicio pide el producto 99 al repositorio.',
+      code: CODE.svcBuscar, hl: [5] },
+    { from: 'repository', to: 'bd', kind: 'req', packet: 'SELECT … WHERE id = 99', at: 'repository',
+      title: 'Repository → PostgreSQL',
+      text: 'Se lanza la consulta SQL.',
+      code: PLAIN('SQL generado por Hibernate', ['select p.id, p.descripcion, p.nombre, p.precio, p.stock', 'from productos p', 'where p.id = ?   -- ? = 99']), hl: [2] },
+    { from: 'bd', to: 'repository', kind: 'res', packet: '0 filas', at: 'bd',
+      title: 'No hay ninguna fila',
+      text: 'Para la base de datos esto <strong>no es un error</strong>: la consulta ha funcionado, simplemente no ha encontrado nada.',
+      code: PLAIN('Resultado', [' id | nombre | descripcion | precio | stock', '----+--------+-------------+--------+------', '(0 rows)']), hl: [2] },
+    { from: 'repository', to: 'service', kind: 'res', packet: 'Optional.empty()', at: 'repository',
+      title: 'El repositorio devuelve una caja vacía',
+      text: 'Por eso <code>findById</code> devuelve un <code>Optional</code>: en vez de devolver <code>null</code> (y arriesgarnos a un <code>NullPointerException</code>), devuelve una caja vacía.',
+      code: CODE.repo, hl: [4] },
+    { from: 'service', to: 'controller', kind: 'err', packet: 'ProductoNoEncontradoException', at: 'service',
+      title: 'El servicio decide que esto SÍ es un error',
+      text: 'Aquí está la <strong>regla de negocio</strong>: si no existe, es un error. <code>orElseThrow</code> lanza la excepción. Nadie la captura con <code>try/catch</code>, así que «sube» atravesando el controlador.',
+      code: CODE.svcBuscar, hl: [6] },
+    { from: 'controller', to: 'cliente', kind: 'err', packet: '404 Not Found', at: 'controller',
+      title: 'Spring convierte la excepción en un 404',
+      text: 'La excepción tiene <code>@ResponseStatus(HttpStatus.NOT_FOUND)</code>, así que Spring responde con un <strong>404</strong> y el mensaje de error. El servicio no sabe nada de HTTP: solo lanza una excepción con significado.',
+      code: CODE.excepcion, hl: [1, 5] }
+  ],
+
+  borrar: [
+    { from: 'cliente', to: 'controller', kind: 'req', packet: 'DELETE /api/productos/7', at: 'controller',
+      title: 'El cliente pide borrar el producto 7',
+      text: '<strong>DELETE</strong> significa «bórralo». No lleva cuerpo: con el id de la URL basta.',
+      code: CODE.ctrlDelete, hl: [4, 6] },
+    { from: 'controller', to: 'service', kind: 'req', packet: 'eliminar(7)', at: 'controller',
+      title: 'Controller → Service',
+      text: 'El controlador pasa el id al servicio.',
+      code: CODE.ctrlDelete, hl: [7] },
+    { from: 'service', to: 'repository', kind: 'req', packet: 'existsById(7)', at: 'service',
+      title: 'Primero, ¿existe?',
+      text: 'Regla de negocio: no se puede borrar algo que no existe (sería un 404). El servicio lo comprueba antes.',
+      code: CODE.svcEliminar, hl: [5] },
+    { from: 'repository', to: 'bd', kind: 'req', packet: 'SELECT count(*) … id = 7', at: 'repository',
+      title: 'Consulta de comprobación',
+      text: 'Hibernate genera una consulta para saber si hay alguna fila con ese id.',
+      code: PLAIN('SQL generado por Hibernate', ['select count(*) from productos p where p.id = ?']), hl: [0] },
+    { from: 'bd', to: 'service', kind: 'res', packet: 'true (existe)', at: 'bd',
+      title: 'Sí existe',
+      text: 'La respuesta vuelve hasta el servicio (pasando por el repositorio) como un <code>boolean</code>: <code>true</code>.',
+      code: CODE.svcEliminar, hl: [5] },
+    { from: 'service', to: 'bd', kind: 'req', packet: 'deleteById(7) → DELETE', at: 'service',
+      title: 'Ahora sí, se borra',
+      text: 'El servicio llama a <code>deleteById</code> y Hibernate genera el <code>DELETE</code>. (La animación salta el repositorio por claridad, pero la llamada pasa por él.)',
+      code: PLAIN('SQL generado por Hibernate', ['delete from productos where id = ?   -- ? = 7']), hl: [0] },
+    { from: 'service', to: 'controller', kind: 'res', packet: 'void (nada)', at: 'service',
+      title: 'El servicio termina sin devolver nada',
+      text: 'El método es <code>void</code>: no hay nada que devolver. <code>@Transactional</code> confirma el borrado.',
+      code: CODE.svcEliminar, hl: [8] },
+    { from: 'controller', to: 'cliente', kind: 'res', packet: '204 No Content', at: 'controller',
+      title: 'Respuesta 204 No Content',
+      text: '<code>@ResponseStatus(HttpStatus.NO_CONTENT)</code>: «hecho, y no tengo nada que enseñarte». La respuesta no tiene cuerpo.',
+      code: CODE.ctrlDelete, hl: [5] }
+  ]
+};
+
+/* ---------------- motor de la animación ---------------- */
+(function () {
+  const stage = document.getElementById('stage');
+  const packet = document.getElementById('packet');
+  const nodes = {};
+  stage.querySelectorAll('.node').forEach(n => nodes[n.dataset.node] = n);
+  const explainText = document.getElementById('explainText');
+  const explainCode = document.getElementById('explainCode');
+  const timeline = document.getElementById('timeline');
+  const stepCount = document.getElementById('stepCount');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const playBtn = document.getElementById('playBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let scn = 'buscar';
+  let idx = -1;
+  let timer = null;
+
+  function center(name) {
+    const s = stage.getBoundingClientRect();
+    const r = nodes[name].getBoundingClientRect();
+    return { x: r.left - s.left + r.width / 2, y: r.top - s.top + r.height / 2 };
+  }
+  function place(name, animate) {
+    const p = center(name);
+    if (!animate) packet.style.transition = 'none';
+    packet.style.left = p.x + 'px';
+    packet.style.top = p.y + 'px';
+    if (!animate) { packet.offsetHeight; packet.style.transition = ''; }
+  }
+
+  function intro() {
+    const first = SCENARIOS[scn][0];
+    explainText.innerHTML = '<h3>Pulsa «Siguiente» para empezar</h3><p>Vas a seguir la operación paso a paso. En cada paso verás <strong>qué capa trabaja</strong>, <strong>qué viaja</strong> a la siguiente y <strong>el código real</strong> que se ejecuta.</p><p style="color:var(--muted)">Primera parada: <code>' + first.packet + '</code></p>';
+    explainCode.innerHTML = '';
+    renderCode(explainCode, 'Código', ['// Aquí aparecerá el código de cada paso'], []);
+  }
+
+  function renderTimeline() {
+    timeline.innerHTML = '';
+    SCENARIOS[scn].forEach((st, i) => {
+      const li = document.createElement('li');
+      li.style.setProperty('--c', LAYER[st.at].c);
+      if (i <= idx) li.classList.add('done');
+      if (i === idx) li.classList.add('current');
+      const t = document.createElement('span');
+      t.textContent = st.title;
+      const a = document.createElement('span');
+      a.className = 'arrow';
+      a.textContent = LAYER[st.from].name + ' → ' + LAYER[st.to].name;
+      li.append(t, a);
+      li.addEventListener('click', () => { stop(); go(i); });
+      timeline.appendChild(li);
+    });
+  }
+
+  function go(i) {
+    const steps = SCENARIOS[scn];
+    idx = Math.max(-1, Math.min(i, steps.length - 1));
+    Object.values(nodes).forEach(n => n.classList.remove('active'));
+    if (idx === -1) {
+      packet.classList.add('hidden');
+      intro();
+    } else {
+      const st = steps[idx];
+      nodes[st.at].classList.add('active');
+      packet.className = 'packet' + (st.kind === 'res' ? ' response' : st.kind === 'err' ? ' error' : '');
+      packet.textContent = st.packet;
+      // se coloca en el origen sin animación (place fuerza un reflow) y luego se anima hasta el destino
+      place(st.from, false);
+      place(st.to, !reduced);
+      setTimeout(() => {
+        if (steps[idx] === st) {
+          nodes[st.at].classList.remove('active');
+          nodes[st.to].classList.add('active');
+        }
+      }, reduced ? 0 : 900);
+      const L = LAYER[st.at];
+      explainText.style.setProperty('--c', L.c);
+      explainText.style.setProperty('--t', L.t);
+      explainText.innerHTML = '<span class="where">Trabaja: ' + L.name + '</span><h3>' + (idx + 1) + '. ' + st.title + '</h3><p>' + st.text + '</p>';
+      renderCode(explainCode, st.code.file, st.code.lines, st.hl);
+    }
+    stepCount.textContent = (idx + 1) + ' / ' + steps.length;
+    prevBtn.disabled = idx <= -1;
+    nextBtn.disabled = idx >= steps.length - 1;
+    renderTimeline();
+  }
+
+  function stop() {
+    if (timer) { clearInterval(timer); timer = null; }
+    playBtn.textContent = '▶ Reproducir';
+  }
+  function play() {
+    if (timer) { stop(); return; }
+    if (idx >= SCENARIOS[scn].length - 1) go(-1);
+    playBtn.textContent = '⏸ Pausa';
+    go(idx + 1);
+    timer = setInterval(() => {
+      if (idx >= SCENARIOS[scn].length - 1) { stop(); return; }
+      go(idx + 1);
+    }, 4200);
+  }
+
+  prevBtn.addEventListener('click', () => { stop(); go(idx - 1); });
+  nextBtn.addEventListener('click', () => { stop(); go(idx + 1); });
+  resetBtn.addEventListener('click', () => { stop(); go(-1); });
+  playBtn.addEventListener('click', play);
+  document.querySelectorAll('[data-scn]').forEach(b => b.addEventListener('click', () => {
+    stop();
+    document.querySelectorAll('[data-scn]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    scn = b.dataset.scn;
+    go(-1);
+  }));
+  window.addEventListener('resize', () => {
+    if (idx >= 0) place(SCENARIOS[scn][idx].to, false);
+  });
+
+  go(-1);
+})();
+
+/* ---------------- explorador de carpetas ---------------- */
+(function () {
+  const FILES = [
+    { dir: 'crud/', depth: 0 },
+    { file: 'compose.yaml', depth: 1, layer: 'bd', badge: 'Base de datos',
+      title: 'compose.yaml', desc: 'Define el contenedor Docker con PostgreSQL. Con <code>docker compose up -d</code> se levanta la base de datos <code>crud</code> en el puerto 5432. <strong>No es parte de la aplicación Java</strong>: es un programa aparte con el que la aplicación se comunica.',
+      code: PLAIN('compose.yaml', ['services:', '  postgres:', '    image: postgres:17', '    environment:', '      POSTGRES_DB: crud', '      POSTGRES_USER: postgres', '      POSTGRES_PASSWORD: postgres', '    ports:', '      - "5432:5432"']), hl: [2, 4, 8] },
+    { file: 'pom.xml', depth: 1, layer: 'other', badge: 'Configuración Maven',
+      title: 'pom.xml', desc: 'Lista de dependencias (librerías) del proyecto: Spring Web, Spring Data JPA, el driver de PostgreSQL… Maven las descarga solo.',
+      code: PLAIN('pom.xml (resumido)', ['<dependency>', '  <artifactId>spring-boot-starter-webmvc</artifactId>   <!-- controladores -->', '</dependency>', '<dependency>', '  <artifactId>spring-boot-starter-data-jpa</artifactId> <!-- repositorios -->', '</dependency>', '<dependency>', '  <artifactId>postgresql</artifactId>                  <!-- driver BD -->', '</dependency>']), hl: [1, 4, 7] },
+    { dir: 'src/main/java/com/saseformacion/crud/', depth: 1 },
+    { file: 'CrudApplication.java', depth: 2, layer: 'other', badge: 'Arranque',
+      title: 'CrudApplication.java', desc: 'El punto de entrada: el <code>main</code>. <code>@SpringBootApplication</code> le dice a Spring que busque componentes <strong>en este paquete y en sus subpaquetes</strong>. Por eso todas las capas van dentro de <code>com.saseformacion.crud</code>.',
+      code: PLAIN('CrudApplication.java', ['@SpringBootApplication', 'public class CrudApplication {', '', '    public static void main(String[] args) {', '        SpringApplication.run(CrudApplication.class, args);', '    }', '}']), hl: [0, 4] },
+    { dir: 'controller/', depth: 2 },
+    { file: 'ProductoController.java', depth: 3, layer: 'controller', badge: 'C · Controller',
+      title: 'ProductoController', desc: 'Atiende las peticiones HTTP de <code>/api/productos</code>. Un método por cada operación del CRUD. Solo traduce HTTP ↔ Java y llama al servicio.',
+      code: PLAIN('controller/ProductoController.java (resumido)', ['@RestController', '@RequestMapping("/api/productos")', 'public class ProductoController {', '', '    @GetMapping              public List<Producto> listar()', '    @GetMapping("/{id}")     public Producto buscarPorId(@PathVariable Long id)', '    @PostMapping             public Producto crear(@RequestBody Producto producto)', '    @PutMapping("/{id}")     public Producto actualizar(@PathVariable Long id, @RequestBody Producto producto)', '    @DeleteMapping("/{id}")  public void eliminar(@PathVariable Long id)', '}']), hl: [0, 1] },
+    { dir: 'service/', depth: 2 },
+    { file: 'ProductoService.java', depth: 3, layer: 'service', badge: 'Lógica de negocio',
+      title: 'ProductoService', desc: 'Las reglas: qué pasa si no existe, que el id lo pone la base de datos, qué campos se actualizan… Usa el repositorio para leer y guardar.',
+      code: CODE.svcBuscar, hl: [0] },
+    { dir: 'repository/', depth: 2 },
+    { file: 'ProductoRepository.java', depth: 3, layer: 'repository', badge: 'Acceso a datos',
+      title: 'ProductoRepository', desc: 'Una <strong>interfaz vacía</strong>. Al extender <code>JpaRepository&lt;Producto, Long&gt;</code> (entidad, tipo del id), Spring Data JPA genera todos los métodos del CRUD al arrancar.',
+      code: CODE.repo, hl: [2] },
+    { dir: 'model/', depth: 2 },
+    { file: 'Producto.java', depth: 3, layer: 'model', badge: 'M · Modelo / Entidad',
+      title: 'Producto', desc: 'Los datos. <code>@Entity</code> la convierte en la tabla <code>productos</code>: cada atributo es una columna y cada objeto, una fila. Es lo que viaja entre todas las capas.',
+      code: CODE.entity, hl: [0, 1] },
+    { dir: 'exception/', depth: 2 },
+    { file: 'ProductoNoEncontradoException.java', depth: 3, layer: 'service', badge: 'Errores',
+      title: 'ProductoNoEncontradoException', desc: 'La lanza el servicio cuando un producto no existe. Gracias a <code>@ResponseStatus</code>, Spring la convierte en un 404 sin que el controlador tenga que hacer nada.',
+      code: CODE.excepcion, hl: [1] },
+    { dir: 'src/main/resources/', depth: 1 },
+    { file: 'application.properties', depth: 2, layer: 'other', badge: 'Configuración',
+      title: 'application.properties', desc: 'Configuración de la aplicación: dónde está la base de datos, usuario y contraseña, y cómo se comporta JPA. <code>ddl-auto=update</code> crea la tabla a partir de la entidad.',
+      code: PLAIN('application.properties', ['spring.datasource.url=${DB_URL:jdbc:postgresql://localhost:5432/crud}', 'spring.datasource.username=${DB_USERNAME:postgres}', 'spring.datasource.password=${DB_PASSWORD:postgres}', '', 'spring.jpa.hibernate.ddl-auto=update', 'spring.jpa.show-sql=true']), hl: [0, 4] },
+    { dir: 'src/test/java/…/', depth: 1 },
+    { file: 'ProductoControllerTest.java', depth: 2, layer: 'controller', badge: 'Tests',
+      title: 'Tests', desc: 'Cada capa se prueba por separado: <code>ProductoControllerTest</code> prueba el controlador con un servicio falso (mock), sin base de datos; <code>ProductoServiceTest</code> prueba el servicio contra PostgreSQL. Esto es posible <strong>gracias a separar en capas</strong>.',
+      code: PLAIN('controller/ProductoControllerTest.java (resumido)', ['@WebMvcTest(ProductoController.class)', 'class ProductoControllerTest {', '', '    @MockitoBean', '    private ProductoService productoService;   // servicio falso', '', '    @Test', '    void buscarPorIdInexistenteDevuelve404() { … }', '}']), hl: [3, 4] }
+  ];
+
+  const tree = document.getElementById('tree');
+  const info = document.getElementById('fileInfo');
+  const codeBox = document.getElementById('fileCode');
+  const buttons = [];
+
+  function show(f, btn) {
+    buttons.forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+    const L = LAYER[f.layer];
+    info.style.setProperty('--c', L.c);
+    info.style.setProperty('--t', L.t);
+    info.innerHTML = '<span class="badge">' + f.badge + '</span><h3>' + f.title + '</h3><p>' + f.desc + '</p>';
+    renderCode(codeBox, f.code.file, f.code.lines, f.hl);
+  }
+
+  FILES.forEach(f => {
+    let el;
+    if (f.dir) {
+      el = document.createElement('div');
+      el.className = 'row dir';
+      el.textContent = f.dir;
+    } else {
+      el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'row';
+      el.setAttribute('aria-pressed', 'false');
+      const L = LAYER[f.layer];
+      el.style.setProperty('--c', L.c);
+      el.style.setProperty('--t', L.t);
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      const name = document.createElement('span');
+      name.textContent = f.file;
+      el.append(dot, name);
+      el.addEventListener('click', () => show(f, el));
+      buttons.push(el);
+    }
+    el.style.paddingLeft = (8 + f.depth * 16) + 'px';
+    tree.appendChild(el);
+  });
+
+  const first = FILES.find(f => f.file === 'ProductoController.java');
+  show(first, buttons[FILES.filter(f => f.file).indexOf(first)]);
+})();
+
+/* ---------------- arranque / inyección ---------------- */
+(function () {
+  const log = [...document.querySelectorAll('#bootLog li')];
+  const beans = [...document.querySelectorAll('#beanBox .bean')];
+  const btn = document.getElementById('bootBtn');
+  const reset = document.getElementById('bootReset');
+  let timers = [];
+
+  function clear() {
+    timers.forEach(clearTimeout); timers = [];
+    log.forEach(l => l.classList.remove('show'));
+    beans.forEach(b => b.classList.remove('show'));
+    btn.disabled = false;
+  }
+  function run() {
+    clear();
+    btn.disabled = true;
+    log.forEach((li, i) => {
+      timers.push(setTimeout(() => {
+        li.classList.add('show');
+        beans.filter(b => b.dataset.b === String(i + 1)).forEach(b => b.classList.add('show'));
+        if (i === log.length - 1) btn.disabled = false;
+      }, i * 1300));
+    });
+  }
+  btn.addEventListener('click', run);
+  reset.addEventListener('click', clear);
+})();
+
+/* ---------------- autoevaluación ---------------- */
+(function () {
+  const Q = [
+    { q: '¿Qué capa decide si un producto que no existe es un error?',
+      opts: ['El Controller', 'El Service', 'El Repository', 'PostgreSQL'], ok: 1,
+      why: 'Es una regla de negocio, así que va en el Service. Para la base de datos y el repositorio, «0 filas» no es un error: es un resultado válido.' },
+    { q: 'En nuestro proyecto (API REST), ¿qué es la «Vista» de MVC?',
+      opts: ['La clase Producto', 'Una página HTML', 'El JSON que se devuelve al cliente', 'La tabla productos'], ok: 2,
+      why: 'Con @RestController, Spring convierte lo que devuelve el controlador en JSON. Eso es lo que «ve» el cliente. Con Thymeleaf la vista sería HTML.' },
+    { q: '¿Puede el Controller llamar directamente a ProductoRepository?',
+      opts: ['Sí, es más rápido', 'No: cada capa solo habla con la siguiente (Controller → Service → Repository)', 'Solo en los GET'], ok: 1,
+      why: 'Funcionaría técnicamente, pero rompe la separación en capas: la lógica de negocio acabaría repartida por los controladores.' },
+    { q: '¿Quién escribe el código de findById(), save() o deleteById()?',
+      opts: ['Nosotros, en ProductoRepository', 'Spring Data JPA, automáticamente', 'PostgreSQL'], ok: 1,
+      why: 'Solo declaramos la interfaz que extiende JpaRepository<Producto, Long>. Spring Data genera la implementación al arrancar, y Hibernate genera el SQL.' },
+    { q: '¿Qué hace @RequestBody en crear(@RequestBody Producto producto)?',
+      opts: ['Guarda el producto en la BD', 'Convierte el JSON del cuerpo de la petición en un objeto Producto', 'Devuelve el producto en JSON', 'Saca el id de la URL'], ok: 1,
+      why: 'Traduce el JSON que envía el cliente a un objeto Java. Sacar un valor de la URL es @PathVariable.' },
+    { q: '¿Quién crea el objeto ProductoService y se lo pasa al controlador?',
+      opts: ['Nosotros, con new ProductoService()', 'Spring, al arrancar (inyección de dependencias)', 'El cliente en cada petición'], ok: 1,
+      why: 'Spring crea un bean de cada clase anotada y lo pasa por el constructor a quien lo necesite. Se crea una vez al arrancar, no en cada petición.' },
+    { q: 'Un cliente pide DELETE /api/productos/7 y todo va bien. ¿Qué código recibe?',
+      opts: ['200 OK', '201 Created', '204 No Content', '404 Not Found'], ok: 2,
+      why: '204: la operación se ha hecho y no hay nada que devolver. 201 es para crear y 404 sería si el 7 no existiera.' },
+    { q: '¿Qué viaja entre el Repository y PostgreSQL?',
+      opts: ['JSON', 'Objetos Java', 'SQL y filas de tablas', 'Peticiones HTTP'], ok: 2,
+      why: 'El repositorio (a través de Hibernate) traduce los objetos Java a SQL. Entre Controller, Service y Repository viajan objetos Java; entre cliente y Controller, HTTP con JSON.' }
+  ];
+
+  crearTest(Q, { quiz: document.getElementById('quiz'), score: document.getElementById('score'), leccion: 'mvc' });
+})();
+
+iniciarLeccion('mvc');
+</script>
+</body>
+</html>

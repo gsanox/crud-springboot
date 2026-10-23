@@ -2,15 +2,14 @@
 
 Una API REST sencilla de productos para explicar **MVC** y la arquitectura en capas **Controller → Service → Repository** con Spring Boot. Es material de clase para DAM y DAW: el código es explícito a propósito (sin Lombok, con getters y setters escritos a mano) y está en español.
 
-**Apuntes interactivos**: [MVC explicado paso a paso](https://gsanox.github.io/crud-springboot/), con el viaje de una petición por las capas, el código de cada paso y una autoevaluación.
+**Lecciones interactivas**: [Spring Boot por capas](https://gsanox.github.io/crud-springboot/), con el itinerario completo. Cada lección usa el código del proyecto, tiene algo que tocar (animaciones, simuladores) y termina con un test.
 
-**Lecciones** ([`docs/lecciones/`](docs/lecciones/README.md)): continúan el CRUD básico, cada una con el código del proyecto, peticiones para probarlo y preguntas de repaso.
-
+0. [MVC explicado paso a paso](https://gsanox.github.io/crud-springboot/mvc.html): el viaje de una petición por las capas.
 1. [Capa de servicio](docs/lecciones/01-capa-servicio.md): reglas de negocio, `@Transactional` y consultas derivadas.
 2. [Patrón DTO](docs/lecciones/02-patron-dto.md): `record` de entrada y de salida, y validación con `@Valid`.
 3. [Mappers](docs/lecciones/03-mappers.md): conversión entidad ↔ DTO en un solo sitio.
 4. [Tratamiento de excepciones](docs/lecciones/04-excepciones.md): `@RestControllerAdvice` y un formato común para los errores.
-5. [Caché](docs/lecciones/05-cache.md): `@Cacheable`, `@CachePut` y `@CacheEvict`.
+5. [Caché](https://gsanox.github.io/crud-springboot/cache.html): `@Cacheable`, `@CachePut` y `@CacheEvict`, con un laboratorio que simula la API.
 
 ## Qué lleva
 

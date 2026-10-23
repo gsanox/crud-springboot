@@ -1,0 +1,996 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lección 05 · Caché · SASE Formación</title>
+<meta name="description" content="Spring Cache con @Cacheable, @CachePut y @CacheEvict, con un laboratorio interactivo que simula la API del proyecto crud.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/sase.css">
+<style>
+/* ---------- laboratorio de caché ---------- */
+.lab { display: grid; grid-template-columns: minmax(280px, 1fr) 1.5fr; gap: 18px; margin-top: 22px; }
+.lab > * { min-width: 0; }
+@media (max-width: 900px) { .lab { grid-template-columns: 1fr; } }
+
+.lab-controles { display: grid; gap: 16px; align-content: start; }
+.lab-controles h4 { margin: 0 0 8px; font: 500 .72rem var(--mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.lab-controles .grupo { display: flex; flex-direction: column; gap: 8px; }
+.lab-controles .chip-btn { justify-content: flex-start; text-align: left; width: 100%; }
+.lab-controles .chip-btn .verb { min-width: 4.2em; }
+.lab-controles .chip-btn.fuera .verb { color: var(--error); }
+.selector { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.selector .chip-btn { width: auto; min-height: 36px; padding: 4px 14px; font-family: var(--mono); }
+.contadores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.contador { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; text-align: center; }
+.contador b { display: block; font: 500 1.4rem var(--mono); color: var(--blue); }
+.contador span { font: 500 .62rem var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.contador.ok b { color: var(--teal); }
+
+.lab-resultado { display: grid; gap: 14px; align-content: start; }
+.peticion-actual { font: 500 .85rem var(--mono); color: var(--blue); overflow-wrap: anywhere; text-transform: none; letter-spacing: 0; }
+.que-paso .where { display: inline-block; font: 500 .7rem var(--mono); letter-spacing: 1.5px; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; margin-bottom: 8px; background: #E2F0EF; color: #2A7574; }
+.que-paso .where.fallo { background: var(--tint-controller); color: var(--blue); }
+.que-paso .where.escritura { background: #FDF1DD; color: #A35F0D; }
+.que-paso .where.error { background: #FBEDEB; color: var(--error); }
+.que-paso p { margin: 4px 0; }
+
+.lab-estado { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 18px; }
+@media (max-width: 760px) { .lab-estado { grid-template-columns: 1fr; } }
+.entrada { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 7px 8px; border-radius: 8px; font-size: .9rem; border-bottom: 1px solid var(--line); }
+.entrada:last-child { border-bottom: 0; }
+.entrada .clave { font: 500 .8rem var(--mono); color: var(--teal); min-width: 2.5em; }
+.entrada .valor { color: var(--ink); }
+.entrada .chip { margin-left: auto; }
+table.mini { font-size: .85rem; }
+table.mini th { background: var(--white); color: var(--muted); border-bottom: 1px solid var(--line); padding: 6px 8px; }
+table.mini td { padding: 6px 8px; }
+table.mini td.num-col { font-family: var(--mono); text-align: right; }
+.diferente { background: #FDF1DD; border-radius: 4px; padding: 0 4px; }
+
+.retos { margin-top: 18px; }
+.retos ol { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; counter-reset: reto; }
+.retos li { counter-increment: reto; display: flex; gap: 12px; align-items: flex-start; padding: 8px 10px; border-radius: 8px; }
+.retos li::before {
+  content: "0" counter(reto); flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  font: 500 .74rem var(--mono); border: 1px solid var(--line); color: var(--muted); background: var(--white);
+}
+.retos li.hecho { background: #E2F0EF; }
+.retos li.hecho::before { content: "✔"; background: var(--teal); border-color: var(--teal); color: var(--white); }
+.retos li small { display: block; color: var(--muted); font-size: .85rem; }
+.retos .score { margin-left: 8px; }
+
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+.dos > * { min-width: 0; }
+@media (max-width: 760px) { .dos { grid-template-columns: 1fr; } }
+.card h3:first-child { margin-top: 0; }
+.card.compensa { border-top: 4px solid var(--teal); }
+.card.no-compensa { border-top: 4px solid var(--error); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html" title="Índice de lecciones"><img src="sase_logo_rectangular.png" alt="SASE Formación"><span>Lección 05 · Caché</span></a>
+    <nav class="nav" aria-label="Secciones">
+      <a href="#que-es">¿Qué es?</a>
+      <a href="#activar">Activarla</a>
+      <a href="#anotaciones">Anotaciones</a>
+      <a href="#laboratorio">Laboratorio</a>
+      <a href="#al-dia">Datos al día</a>
+      <a href="#trampas">Trampas</a>
+      <a href="#produccion">En producción</a>
+      <a href="#test">Autoevaluación</a>
+      <a href="#resumen">Resumen</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero-band">
+<div class="hero">
+  <div class="kicker">Lección 05 · Spring Cache · Proyecto CRUD de productos</div>
+  <h1>Caché</h1>
+  <p class="lead">Qué es una caché, cómo se activa en Spring y qué hacen <code>@Cacheable</code>, <code>@CachePut</code> y <code>@CacheEvict</code>. Y el problema de verdad de cualquier caché: mantener los datos al día. Con un laboratorio que simula la API del proyecto.</p>
+  <div class="callout key">
+    <strong>La idea en una frase</strong>
+    Guardar en memoria lo que ya se ha leído para no volver a pedirlo a la base de datos, y acordarse de actualizarlo cada vez que cambia.
+  </div>
+</div>
+</div>
+
+<main>
+
+<!-- ================= QUÉ ES ================= -->
+<section id="que-es">
+  <div class="kicker">01 · Concepto</div>
+  <h2>Qué es una caché</h2>
+  <p class="lead">Una caché es una <strong>memoria rápida donde se guardan resultados ya calculados</strong> para no tener que calcularlos otra vez.</p>
+  <p>Pedir un producto a PostgreSQL implica una conexión de red, una consulta SQL, leer del disco y convertir la fila en un objeto. Si el mismo producto se pide mil veces por minuto y casi nunca cambia, la caché lo devuelve directamente desde la memoria de la aplicación:</p>
+<div class="ruta" style="grid-template-columns: max-content minmax(0,1.2fr) auto minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,.9fr)" role="img" aria-label="La primera petición llega a PostgreSQL y guarda el resultado en la caché; la segunda sale directamente de la caché">
+  <div class="ruta-fila">
+    <span class="etq">1ª petición</span>
+    <div class="paso" style="--c: var(--c-controller); --t: var(--tint-controller)">GET /api/productos/7</div><span class="fl"></span>
+    <div class="paso no">¿En la caché?<small>No: hay que ir a buscarlo</small></div><span class="fl"></span>
+    <div class="paso" style="--c: var(--c-bd); --t: var(--tint-bd)">PostgreSQL<small>red, SQL, disco</small></div><span class="fl vuelta"></span>
+    <div class="paso" style="--c: var(--c-service); --t: var(--tint-service)">Se guarda en la caché<small>clave 7</small></div><span class="fl vuelta"></span>
+    <div class="paso si">Respuesta</div>
+  </div>
+  <div class="ruta-fila">
+    <span class="etq">2ª petición</span>
+    <div class="paso" style="--c: var(--c-controller); --t: var(--tint-controller)">GET /api/productos/7</div><span class="fl"></span>
+    <div class="paso si">¿En la caché?<small>Sí: ya está en memoria</small></div>
+    <div class="salto" style="grid-column: span 5">atajo: no llega a PostgreSQL</div>
+    <div class="paso si">Respuesta</div>
+  </div>
+</div>
+  <div class="dos">
+    <div class="card compensa">
+      <h3>Compensa</h3>
+      <p>Cuando los datos se <strong>leen mucho más de lo que cambian</strong>: catálogos de productos, configuración, listas de países o de provincias.</p>
+    </div>
+    <div class="card no-compensa">
+      <h3>No compensa</h3>
+      <p>Con datos que cambian a cada momento, o que tienen que estar exactos al segundo, como el saldo de una cuenta bancaria.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ACTIVAR ================= -->
+<section id="activar">
+  <div class="kicker">02 · Configuración</div>
+  <h2>Activarla: una dependencia y una anotación</h2>
+  <div class="dos">
+    <div class="code" data-snippet="pom"></div>
+    <div class="code" data-snippet="properties"></div>
+  </div>
+  <div class="code flotante" data-snippet="cacheConfig"></div>
+  <div class="callout warn">
+    <strong>El fallo más común</strong>
+    Sin <code>@EnableCaching</code>, las anotaciones <code>@Cacheable</code>, <code>@CachePut</code> y <code>@CacheEvict</code> <strong>se ignoran sin dar ningún error</strong>. Todo parece funcionar… y nada se guarda en caché.
+  </div>
+  <p>Los nombres de las cachés van en constantes para no escribirlos a mano (y con faltas) en cada anotación. Con <code>spring.cache.type=simple</code>, cada caché es un <code>Map</code> en memoria:</p>
+<div class="dos">
+    <div class="panel">
+      <h4>Caché <code>productoPorId</code></h4>
+      <div class="entrada"><span class="clave">7 →</span><span class="valor">ProductoResponse(id=7, nombre="Teclado", …)</span></div>
+      <div class="entrada"><span class="clave">8 →</span><span class="valor">ProductoResponse(id=8, nombre="Ratón", …)</span></div>
+      <p class="vacio" style="margin:10px 0 0">Una entrada por producto pedido, con su id como clave (<code>key = "#id"</code>).</p>
+    </div>
+    <div class="panel">
+      <h4>Caché <code>listaProductos</code></h4>
+      <div class="entrada"><span class="clave">SimpleKey[] →</span><span class="valor">[ProductoResponse(id=7…), ProductoResponse(id=8…)]</span></div>
+      <p class="vacio" style="margin:10px 0 0"><code>listar()</code> no tiene parámetros, así que Spring usa una clave vacía: solo hay una entrada.</p>
+    </div>
+  </div>
+  <p style="margin-top:16px">Se vacía al reiniciar la aplicación y sus datos no caducan nunca.</p>
+</section>
+
+<!-- ================= ANOTACIONES ================= -->
+<section id="anotaciones">
+  <div class="kicker">03 · Las tres anotaciones</div>
+  <h2>Leer, actualizar y borrar de la caché</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Anotación</th><th>¿Ejecuta el método?</th><th>Qué hace con la caché</th><th>Se usa para</th></tr></thead>
+      <tbody>
+        <tr><td><code>@Cacheable</code></td><td>Solo si el dato <strong>no</strong> está en la caché</td><td>Guarda el resultado</td><td>Leer</td></tr>
+        <tr><td><code>@CachePut</code></td><td><strong>Siempre</strong></td><td>Guarda (sustituye) el resultado</td><td>Actualizar</td></tr>
+        <tr><td><code>@CacheEvict</code></td><td><strong>Siempre</strong></td><td>Borra una entrada, o todas con <code>allEntries = true</code></td><td>Borrar o invalidar</td></tr>
+        <tr><td><code>@Caching</code></td><td>–</td><td>Agrupa varias de las anteriores en un mismo método</td><td>Combinar</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Así se lee un producto</h3>
+  <div class="dos">
+    <div class="code" data-snippet="buscarPorId"></div>
+    <div>
+      <ul style="margin:0;padding-left:18px">
+        <li><code>key = "#id"</code> usa el parámetro <code>id</code> como clave. Es una expresión SpEL: <code>#</code> más el nombre del parámetro.</li>
+        <li>Si el método <strong>lanza una excepción</strong>, no se guarda nada: un 404 no se queda «pegado» en la caché.</li>
+        <li>El <code>log.info</code> está para <strong>ver la caché funcionando</strong>: solo sale en la consola cuando de verdad se consulta la base de datos. Si la respuesta viene de la caché, el método ni se ejecuta.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= LABORATORIO ================= -->
+<section id="laboratorio">
+  <div class="kicker">04 · Laboratorio</div>
+  <h2>Pruébalo: la API, la caché y la base de datos a la vista</h2>
+  <p class="lead">Este laboratorio imita lo que hace el proyecto: lanza peticiones y mira qué pasa en cada caché, en la tabla y en la consola. Intenta completar los retos de abajo.</p>
+
+  <div class="lab">
+    <div class="card lab-controles">
+      <div>
+        <h4>Producto</h4>
+        <div class="selector" id="selector" role="group" aria-label="Producto"></div>
+      </div>
+      <div class="grupo">
+        <h4>Lecturas · @Cacheable</h4>
+        <button class="chip-btn" type="button" data-accion="buscar"><span class="verb">GET</span><span>/api/productos/<b class="id-sel">7</b></span></button>
+        <button class="chip-btn" type="button" data-accion="listar"><span class="verb">GET</span><span>/api/productos</span></button>
+      </div>
+      <div class="grupo">
+        <h4>Escrituras por la API</h4>
+        <button class="chip-btn" type="button" data-accion="vender"><span class="verb">POST</span><span>/<b class="id-sel">7</b>/ventas · cantidad 2</span></button>
+        <button class="chip-btn" type="button" data-accion="actualizar"><span class="verb">PUT</span><span>/<b class="id-sel">7</b> · rebaja del 10 %</span></button>
+        <button class="chip-btn" type="button" data-accion="eliminar"><span class="verb">DELETE</span><span>/api/productos/<b class="id-sel">7</b></span></button>
+        <button class="chip-btn" type="button" data-accion="crear"><span class="verb">POST</span><span>/api/productos · «Monitor»</span></button>
+      </div>
+      <div class="grupo">
+        <h4>Por fuera de la API</h4>
+        <button class="chip-btn fuera" type="button" data-accion="psql"><span class="verb">psql</span><span>update precio = 1.00 del <b class="id-sel">7</b></span></button>
+        <button class="chip-btn fuera" type="button" data-accion="reiniciar"><span class="verb">app</span><span>Reiniciar la aplicación</span></button>
+      </div>
+      <div class="contadores" aria-live="polite">
+        <div class="contador ok"><b id="nAciertos">0</b><span>Aciertos</span></div>
+        <div class="contador"><b id="nFallos">0</b><span>Fallos</span></div>
+        <div class="contador"><b id="nConsultas">0</b><span>Consultas BD</span></div>
+      </div>
+      <button class="btn" type="button" id="deCero">Empezar de cero</button>
+    </div>
+
+    <div class="lab-resultado">
+      <div class="panel">
+        <h4>Petición <span class="peticion-actual" id="peticionActual"></span></h4>
+        <div id="respuesta"><p class="vacio">Pulsa una petición de la izquierda.</p></div>
+      </div>
+      <div class="panel que-paso" id="quePaso" aria-live="polite">
+        <span class="where">Qué ha pasado</span>
+        <p>Empieza pidiendo el producto 7 dos veces seguidas y fíjate en los contadores y en la consola.</p>
+      </div>
+      <div class="code" id="codigoLab"></div>
+    </div>
+  </div>
+
+  <div class="lab-estado">
+    <div class="panel"><h4>Caché <code>productoPorId</code></h4><div id="vistaPorId"></div></div>
+    <div class="panel"><h4>Caché <code>listaProductos</code></h4><div id="vistaLista"></div></div>
+    <div class="panel"><h4>PostgreSQL · tabla <code>productos</code></h4><div id="vistaTabla"></div></div>
+    <div class="panel oscuro"><h4>Consola de la aplicación</h4><div class="consola" id="consola"></div></div>
+  </div>
+
+  <div class="card retos">
+    <h3 style="margin:0">Retos <span class="score" id="retosScore"></span></h3>
+    <ol id="retos"></ol>
+  </div>
+</section>
+
+<!-- ================= AL DÍA ================= -->
+<section id="al-dia">
+  <div class="kicker">05 · El problema de verdad</div>
+  <h2>Mantener la caché al día</h2>
+  <p class="lead">Si el dato cambia en la base de datos y la caché no se entera, se devuelven <strong>datos viejos</strong>. Por eso cada método que modifica algo tiene que decir qué pasa con la caché.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Método</th><th>productoPorId</th><th>listaProductos</th><th>Por qué</th></tr></thead>
+      <tbody>
+        <tr><td><code>listar()</code></td><td>–</td><td><code>@Cacheable</code></td><td></td></tr>
+        <tr><td><code>buscarPorId(id)</code></td><td><code>@Cacheable</code></td><td>–</td><td></td></tr>
+        <tr><td><code>crear(...)</code></td><td>–</td><td><code>@CacheEvict(allEntries)</code></td><td>La lista ya no está completa</td></tr>
+        <tr><td><code>actualizar(id, ...)</code></td><td><code>@CachePut</code></td><td><code>@CacheEvict(allEntries)</code></td><td>El producto cambia, y la lista también</td></tr>
+        <tr><td><code>vender(id, ...)</code></td><td><code>@CachePut</code></td><td><code>@CacheEvict(allEntries)</code></td><td>Cambia el stock</td></tr>
+        <tr><td><code>eliminar(id)</code></td><td><code>@CacheEvict</code></td><td><code>@CacheEvict(allEntries)</code></td><td>Ya no existe</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="code flotante" data-snippet="actualizar"></div>
+  <div class="dos">
+    <div class="card">
+      <h3>¿Por qué <code>@CachePut</code> al actualizar?</h3>
+      <p>Las dos opciones son correctas. <code>@CachePut</code> guarda directamente el producto ya actualizado, así que la siguiente lectura ni siquiera va a la base de datos. <code>@CacheEvict</code> lo borraría, y la siguiente lectura lo volvería a cargar.</p>
+    </div>
+    <div class="card">
+      <h3>¿Por qué se vacía la lista entera?</h3>
+      <p>Saber qué posición de la lista ocupa cada producto es complicado. Vaciarla es sencillo y seguro: la siguiente llamada a <code>listar()</code> la reconstruye.</p>
+    </div>
+  </div>
+  <div class="callout key">
+    <strong>Solo si el método termina bien</strong>
+    Si <code>vender()</code> lanza <code>StockInsuficienteException</code>, ni <code>@CachePut</code> ni <code>@CacheEvict</code> hacen nada: la caché queda como estaba. Compruébalo en el laboratorio vendiendo hasta agotar el stock.
+  </div>
+
+  <h3>Por qué se guardan DTOs y no entidades</h3>
+  <p>La caché guarda <strong>el objeto tal cual</strong> en memoria, y todas las peticiones reciben <strong>el mismo objeto</strong>. Si fuera una entidad con <em>setters</em>, cualquier código que la modificara cambiaría «sin querer» lo que hay en la caché. Además, una entidad JPA está ligada a la sesión de Hibernate que la cargó.</p>
+  <p>Los DTOs son <code>record</code> (<strong>inmutables</strong>) y la lista viene de <code>.toList()</code> (<strong>no modificable</strong>), así que nadie puede estropear lo que hay en la caché. Otra ventaja de la <a href="https://github.com/gsanox/crud-springboot/blob/main/docs/lecciones/02-patron-dto.md">lección 02</a>.</p>
+</section>
+
+<!-- ================= TRAMPAS ================= -->
+<section id="trampas">
+  <div class="kicker">06 · Trampas típicas</div>
+  <h2>Cuando «la caché no funciona»</h2>
+
+  <h3>La llamada interna no pasa por la caché</h3>
+  <p>Spring implementa la caché con un <strong>proxy</strong>: un objeto que envuelve al servicio y mira la caché antes de llamar al método de verdad. Eso solo funciona cuando la llamada <strong>viene de fuera</strong>, por ejemplo del controlador:</p>
+<div class="ruta" style="grid-template-columns: max-content minmax(0,1fr) auto minmax(0,1.1fr) auto minmax(0,1.1fr) auto minmax(0,.9fr)" role="img" aria-label="Una llamada desde el controlador pasa por el proxy y usa la caché; una llamada con this desde el propio servicio no pasa por el proxy y se salta la caché">
+  <div class="ruta-fila">
+    <span class="etq">Desde fuera</span>
+    <div class="paso" style="--c: var(--c-controller); --t: var(--tint-controller)">Controller</div><span class="fl"></span>
+    <div class="paso" style="--c: var(--c-model); --t: var(--tint-model)">Proxy de Spring<small>mira la caché antes de llamar</small></div><span class="fl"></span>
+    <div class="paso" style="--c: var(--c-service); --t: var(--tint-service)">ProductoService<small>buscarPorId(7)</small></div><span class="fl vuelta"></span>
+    <div class="paso si">Usa la caché</div>
+  </div>
+  <div class="ruta-fila">
+    <span class="etq">Desde dentro</span>
+    <div class="paso" style="--c: var(--c-service); --t: var(--tint-service)">ProductoService<small>otroMetodo()</small></div><span class="fl"></span>
+    <div class="paso saltado">Proxy de Spring<small>no se pasa por él</small></div><span class="fl"></span>
+    <div class="paso" style="--c: var(--c-service); --t: var(--tint-service)">this.buscarPorId(7)<small>llamada directa al objeto</small></div><span class="fl vuelta"></span>
+    <div class="paso no">Se salta la caché</div>
+  </div>
+</div>
+  <p>Si un método del servicio llama a <code>this.buscarPorId(id)</code>, la caché <strong>se ignora</strong>. Lo mismo pasa con <code>@Transactional</code>. En este proyecto no es un problema porque los métodos internos usan <code>obtenerProducto()</code>, que no tiene caché a propósito.</p>
+
+  <h3>Los cambios hechos por detrás</h3>
+  <p>La caché solo se entera de los cambios que pasan <strong>por los métodos anotados</strong>. Un cambio por otra vía (otro programa, un script SQL, otra instancia de la aplicación) la deja desactualizada hasta que se reinicie la aplicación. Es el reto 03 del laboratorio. En el proyecto real se reproduce así:</p>
+  <div class="code flotante" data-snippet="psql"></div>
+
+  <h3>Los tests y la caché</h3>
+  <p>La caché <strong>no es transaccional</strong>: aunque un test con <code>@Transactional</code> deshaga los cambios en la base de datos, lo que se guardó en la caché se queda ahí para el siguiente test. Por eso <code>ProductoServiceTest</code> la vacía antes de cada test, y comprueba su contenido con <code>CacheManager</code>:</p>
+  <div class="dos">
+    <div class="code" data-snippet="testBefore"></div>
+    <div class="code" data-snippet="testCache"></div>
+  </div>
+</section>
+
+<!-- ================= PRODUCCIÓN ================= -->
+<section id="produccion">
+  <div class="kicker">07 · En un proyecto real</div>
+  <h2>Más allá de la caché <code>simple</code></h2>
+  <p class="lead">La caché <code>simple</code> es perfecta para aprender, pero no caduca, no tiene tamaño máximo y, si la aplicación corre en varios servidores, cada uno tiene la suya.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Caché</th><th>Dónde vive</th><th>Caducidad / tamaño máximo</th><th>Compartida entre servidores</th></tr></thead>
+      <tbody>
+        <tr><td><code>simple</code> (este proyecto)</td><td>Memoria de la aplicación</td><td>No</td><td>No</td></tr>
+        <tr><td><strong>Caffeine</strong></td><td>Memoria de la aplicación</td><td>Sí (<code>expireAfterWrite</code>, <code>maximumSize</code>)</td><td>No</td></tr>
+        <tr><td><strong>Redis</strong></td><td>Un servidor aparte</td><td>Sí (TTL)</td><td>Sí</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout">
+    <strong>Las anotaciones no cambian</strong>
+    Pasar a Caffeine o Redis es añadir la dependencia y configurarlo: <code>@Cacheable</code>, <code>@CachePut</code> y <code>@CacheEvict</code> siguen igual. Esa es la ventaja de que Spring separe la «abstracción de caché» de la implementación.
+  </div>
+
+  <h3>Errores típicos</h3>
+  <div class="grid cols-2">
+    <div class="card"><b class="dont">Olvidar @EnableCaching.</b> Nada falla, pero no se cachea nada.</div>
+    <div class="card"><b class="dont">Cachear y no invalidar.</b> Poner <code>@Cacheable</code> en una lectura sin <code>@CacheEvict</code> o <code>@CachePut</code> en las escrituras. Se devuelven datos viejos.</div>
+    <div class="card"><b class="dont">Llamar al método cacheado desde la misma clase.</b> <code>this.buscarPorId()</code> se salta la caché.</div>
+    <div class="card"><b class="dont">Cachear entidades</b> o listas modificables.</div>
+    <div class="card"><b class="dont">Cachear todo «por si acaso».</b> Una caché añade complejidad y riesgo de datos viejos. Solo donde se lee mucho y cambia poco.</div>
+  </div>
+</section>
+
+<!-- ================= TEST ================= -->
+<section id="test">
+  <div class="kicker">08 · Autoevaluación</div>
+  <h2>¿Lo has pillado? Comprueba</h2>
+  <p class="lead">Pulsa una respuesta. Si fallas, lee la explicación: es donde más se aprende. <span class="score" id="score"></span></p>
+  <div class="quiz" id="quiz"></div>
+</section>
+
+<!-- ================= RESUMEN ================= -->
+<section id="resumen" class="summary">
+  <div class="kicker">09 · Para repasar</div>
+  <h2>Si solo te quedas con 5 ideas</h2>
+  <div class="card">
+    <ol>
+      <li>Una caché guarda en memoria resultados ya leídos. Compensa con datos que se <strong>leen mucho y cambian poco</strong>.</li>
+      <li>Se activa con <code>spring-boot-starter-cache</code> y <strong><code>@EnableCaching</code></strong>; sin esta, las anotaciones se ignoran en silencio.</li>
+      <li><strong><code>@Cacheable</code></strong> evita ejecutar el método si el dato ya está; <strong><code>@CachePut</code></strong> lo ejecuta siempre y guarda el resultado; <strong><code>@CacheEvict</code></strong> borra.</li>
+      <li>Cada escritura tiene que <strong>actualizar o invalidar</strong> las cachés afectadas. Los cambios hechos por fuera de la aplicación no se ven hasta reiniciar o hasta que caduquen.</li>
+      <li>Se cachean <strong>DTOs inmutables</strong>, la caché funciona a través de un <strong>proxy</strong> (las llamadas internas se la saltan) y <strong>no es transaccional</strong>.</li>
+    </ol>
+  </div>
+</section>
+
+<nav class="lesson-nav" id="lessonNav" aria-label="Lecciones"></nav>
+
+</main>
+
+<footer>Lecciones del proyecto <code>crud</code> (Spring Boot 4 · PostgreSQL) · DAM · DAW<br><a href="https://saseformacion.es">sase<span>_</span> Formación</a> · saseformacion.es</footer>
+
+<script src="assets/lecciones.js"></script>
+<script>
+/* ---------------- código real del proyecto ---------------- */
+const SNIPPETS = {
+  pom: { file: 'pom.xml', hl: [2], lines: [
+    '<dependency>',
+    '    <groupId>org.springframework.boot</groupId>',
+    '    <artifactId>spring-boot-starter-cache</artifactId>',
+    '</dependency>'] },
+  properties: { file: 'src/main/resources/application.properties', hl: [1], lines: [
+    '# Caché: "simple" = un Map en memoria por cada caché (ver config/CacheConfig.java)',
+    'spring.cache.type=simple'] },
+  cacheConfig: { file: 'config/CacheConfig.java', hl: [0, 1, 5, 6], lines: [
+    '@Configuration',
+    '@EnableCaching',
+    'public class CacheConfig {',
+    '',
+    '    // Nombres de las cachés, en constantes para no escribirlos a mano en cada anotación',
+    '    public static final String PRODUCTO_POR_ID = "productoPorId";',
+    '    public static final String LISTA_PRODUCTOS = "listaProductos";',
+    '}'] },
+  listar: { file: 'service/ProductoService.java', hl: [1], lines: [
+    '// La primera vez consulta la base de datos; las siguientes devuelve la lista guardada en caché',
+    '@Cacheable(CacheConfig.LISTA_PRODUCTOS)',
+    '@Transactional(readOnly = true)',
+    'public List<ProductoResponse> listar() {',
+    '    log.info("Consultando la base de datos: todos los productos");',
+    '    return productoMapper.toResponseList(productoRepository.findAll());',
+    '}'] },
+  buscarPorId: { file: 'service/ProductoService.java', hl: [1], lines: [
+    '// Se guarda en caché con el id como clave. Si lanza una excepción, no se guarda nada.',
+    '@Cacheable(value = CacheConfig.PRODUCTO_POR_ID, key = "#id")',
+    '@Transactional(readOnly = true)',
+    'public ProductoResponse buscarPorId(Long id) {',
+    '    log.info("Consultando la base de datos: producto {}", id);',
+    '    return productoMapper.toResponse(obtenerProducto(id));',
+    '}'] },
+  crear: { file: 'service/ProductoService.java', hl: [1], lines: [
+    '// Un producto nuevo cambia la lista: se vacía esa caché',
+    '@CacheEvict(value = CacheConfig.LISTA_PRODUCTOS, allEntries = true)',
+    '@Transactional',
+    'public ProductoResponse crear(ProductoRequest request) {',
+    '    // Regla de negocio: no puede haber dos productos con el mismo nombre',
+    '    if (productoRepository.existsByNombreIgnoreCase(request.nombre())) {',
+    '        throw new ProductoDuplicadoException(request.nombre());',
+    '    }',
+    '    Producto producto = productoMapper.toEntity(request);',
+    '    producto.setFechaCreacion(LocalDateTime.now());',
+    '    return productoMapper.toResponse(productoRepository.save(producto));',
+    '}'] },
+  actualizar: { file: 'service/ProductoService.java', hl: [2, 3], lines: [
+    '// @CachePut ejecuta siempre el método y guarda el resultado en la caché (la deja actualizada)',
+    '@Caching(',
+    '        put = @CachePut(value = CacheConfig.PRODUCTO_POR_ID, key = "#id"),',
+    '        evict = @CacheEvict(value = CacheConfig.LISTA_PRODUCTOS, allEntries = true))',
+    '@Transactional',
+    'public ProductoResponse actualizar(Long id, ProductoRequest request) {',
+    '    Producto producto = obtenerProducto(id);',
+    '    if (productoRepository.existsByNombreIgnoreCaseAndIdNot(request.nombre(), id)) {',
+    '        throw new ProductoDuplicadoException(request.nombre());',
+    '    }',
+    '    productoMapper.updateEntity(producto, request);',
+    '    return productoMapper.toResponse(productoRepository.save(producto));',
+    '}'] },
+  vender: { file: 'service/ProductoService.java', hl: [1, 2], lines: [
+    '@Caching(',
+    '        put = @CachePut(value = CacheConfig.PRODUCTO_POR_ID, key = "#id"),',
+    '        evict = @CacheEvict(value = CacheConfig.LISTA_PRODUCTOS, allEntries = true))',
+    '@Transactional',
+    'public ProductoResponse vender(Long id, int cantidad) {',
+    '    Producto producto = obtenerProducto(id);',
+    '    // Regla de negocio: no se puede vender más de lo que hay',
+    '    if (producto.getStock() < cantidad) {',
+    '        throw new StockInsuficienteException(producto.getNombre(), producto.getStock(), cantidad);',
+    '    }',
+    '    producto.setStock(producto.getStock() - cantidad);',
+    '    return productoMapper.toResponse(productoRepository.save(producto));',
+    '}'] },
+  eliminar: { file: 'service/ProductoService.java', hl: [0, 1, 2], lines: [
+    '@Caching(evict = {',
+    '        @CacheEvict(value = CacheConfig.PRODUCTO_POR_ID, key = "#id"),',
+    '        @CacheEvict(value = CacheConfig.LISTA_PRODUCTOS, allEntries = true) })',
+    '@Transactional',
+    'public void eliminar(Long id) {',
+    '    if (!productoRepository.existsById(id)) {',
+    '        throw new ProductoNoEncontradoException(id);',
+    '    }',
+    '    productoRepository.deleteById(id);',
+    '}'] },
+  psql: { file: 'Terminal', hl: [0], lines: [
+    'docker exec -it crud-postgres psql -U postgres -d crud -c "update productos set precio = 1 where id = 7"',
+    'UPDATE 1',
+    '',
+    '# GET /api/productos/7 sigue devolviendo el precio antiguo: sale de la caché'] },
+  reiniciar: { file: 'Terminal', hl: [0], lines: [
+    './mvnw spring-boot:run',
+    '',
+    '# Al arrancar de nuevo, las cachés "simple" están vacías:',
+    '# viven en la memoria de la aplicación, no en la base de datos'] },
+  testBefore: { file: 'test/.../service/ProductoServiceTest.java', hl: [4, 5], lines: [
+    '@BeforeEach',
+    'void empezarDeCero() {',
+    '    // La tabla se vacía dentro de la transacción del test (se deshace al terminar)',
+    '    productoRepository.deleteAll();',
+    '    // La caché NO es transaccional: hay que vaciarla a mano entre tests',
+    '    cacheManager.getCacheNames().forEach(nombre -> cacheManager.getCache(nombre).clear());',
+    '}'] },
+  testCache: { file: 'test/.../service/ProductoServiceTest.java', hl: [9, 11], lines: [
+    '@Test',
+    'void buscarPorIdGuardaElResultadoEnCache() {',
+    '    ProductoResponse creado = productoService.crear(teclado());',
+    '    Cache cache = cacheManager.getCache(CacheConfig.PRODUCTO_POR_ID);',
+    '    assertNull(cache.get(creado.id()));',
+    '',
+    '    ProductoResponse primeraVez = productoService.buscarPorId(creado.id());',
+    '    ProductoResponse segundaVez = productoService.buscarPorId(creado.id());',
+    '',
+    '    assertNotNull(cache.get(creado.id()));',
+    '    // La segunda vez no se consulta la base de datos: es literalmente el mismo objeto',
+    '    assertTrue(primeraVez == segundaVez);',
+    '}'] }
+};
+
+document.querySelectorAll('[data-snippet]').forEach(el => {
+  const s = SNIPPETS[el.dataset.snippet];
+  renderCode(el, s.file, s.lines, s.hl);
+});
+
+/* ---------------- laboratorio ----------------
+   Imita ProductoService: misma lógica de caché, mismos mensajes de log y mismas respuestas. */
+(function () {
+  const INICIALES = [
+    { id: 7, nombre: 'Teclado', descripcion: 'Teclado mecánico', precio: '49.99', stock: 10, fechaCreacion: '2026-10-23T10:00:00' },
+    { id: 8, nombre: 'Ratón', descripcion: 'Ratón inalámbrico', precio: '19.90', stock: 3, fechaCreacion: '2026-10-23T10:05:00' }
+  ];
+  const RETOS = [
+    { id: 'acierto', texto: 'Consigue un acierto de caché.', pista: 'Pide el mismo producto dos veces seguidas.' },
+    { id: 'alDia', texto: 'Vende unidades y vuelve a pedir el producto: tiene que salir de la caché, pero con el stock nuevo.', pista: 'Es lo que hace @CachePut.' },
+    { id: 'lista', texto: 'Comprueba que crear un producto vacía la caché de la lista.', pista: 'Pide la lista, crea el «Monitor» y vuelve a pedirla.' },
+    { id: 'desactualizado', texto: 'Consigue que la API devuelva un dato desactualizado.', pista: 'Cambia algo en la base de datos sin pasar por la API.' },
+    { id: 'arreglado', texto: 'Después, consigue que vuelva a salir el dato correcto sin tocar la base de datos.', pista: 'Hay dos formas: una escritura por la API o reiniciar la aplicación.' },
+    { id: 'error', texto: 'Comprueba que un 404 no se guarda en la caché.', pista: 'Pide dos veces un producto que no existe: las dos van a la base de datos.' }
+  ];
+
+  let bd, porId, lista, cuenta, siguienteId, idSel;
+  let retosHechos = new Set((Progreso.leer().cache || {}).retos || []);
+  // Memoria para detectar los retos
+  let ultimoPut = null, listaVaciadaPorCrear = false, desactualizados = new Set(), ultimo404 = null;
+
+  const $ = id => document.getElementById(id);
+
+  function deCero() {
+    bd = new Map(INICIALES.map(p => [p.id, Object.assign({}, p)]));
+    porId = new Map();
+    lista = null;
+    cuenta = { aciertos: 0, fallos: 0, consultas: 0 };
+    siguienteId = 9;
+    idSel = 7;
+    ultimoPut = null; listaVaciadaPorCrear = false; desactualizados = new Set(); ultimo404 = null;
+    $('consola').innerHTML = '';
+    $('respuesta').innerHTML = '<p class="vacio">Pulsa una petición de la izquierda.</p>';
+    $('peticionActual').textContent = '';
+    explicar('Qué ha pasado', '', '<p>Empieza pidiendo el producto 7 dos veces seguidas y fíjate en los contadores y en la consola.</p>');
+    renderCode($('codigoLab'), 'service/ProductoService.java', ['// Aquí aparecerá el método del servicio que se ejecuta'], []);
+    pintarTodo(false);
+  }
+
+  /* El DTO que devuelve el servicio: inmutable, como un record */
+  function dto(p) {
+    return Object.freeze({ id: p.id, nombre: p.nombre, descripcion: p.descripcion, precio: p.precio,
+      stock: p.stock, disponible: p.stock > 0, fechaCreacion: p.fechaCreacion });
+  }
+  function json(d) {
+    return '{\n  "id": ' + d.id + ',\n  "nombre": "' + d.nombre + '",\n  "descripcion": "' + d.descripcion +
+      '",\n  "precio": ' + d.precio + ',\n  "stock": ' + d.stock + ',\n  "disponible": ' + d.disponible +
+      ',\n  "fechaCreacion": "' + d.fechaCreacion + '"\n}';
+  }
+  function iguales(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  function error(estado, nombre, mensaje, ruta) {
+    return '{\n  "estado": ' + estado + ',\n  "error": "' + nombre + '",\n  "mensaje": "' + mensaje + '",\n  "ruta": "' + ruta + '",\n  "errores": {}\n}';
+  }
+
+  /* ---------- consola ---------- */
+  function hora() { return new Date().toTimeString().slice(0, 8); }
+  function log(tipo, texto) {
+    const c = $('consola');
+    const d = document.createElement('div');
+    const t = document.createElement('span');
+    t.className = 't';
+    t.textContent = hora() + '  ';
+    const m = document.createElement('span');
+    m.className = tipo;
+    m.textContent = texto;
+    d.append(t, m);
+    c.appendChild(d);
+    while (c.children.length > 60) c.removeChild(c.firstChild);
+    c.scrollTop = c.scrollHeight;
+  }
+  const INFO = texto => log('info', 'INFO  c.s.crud.service.ProductoService : ' + texto);
+  const SQL = texto => { cuenta.consultas++; log('sql', 'Hibernate: ' + texto); };
+  const NOTA = texto => log('nota', texto);
+
+  /* ---------- respuesta y explicación ---------- */
+  function responder(peticion, estado, cuerpo) {
+    $('peticionActual').textContent = peticion;
+    const caja = $('respuesta');
+    caja.innerHTML = '';
+    const chip = document.createElement('span');
+    chip.className = 'estado-http' + (estado >= 400 ? ' err' : estado === 0 ? ' aviso' : '');
+    chip.textContent = estado === 0 ? 'fuera de la API' : estado + ' ' + ({ 200: 'OK', 201: 'Created', 204: 'No Content', 404: 'Not Found', 409: 'Conflict' }[estado]);
+    const pre = document.createElement('pre');
+    pre.className = 'respuesta-http';
+    pre.textContent = cuerpo || '(sin cuerpo)';
+    pre.style.marginTop = '10px';
+    caja.append(chip, pre);
+  }
+  function explicar(etiqueta, tipo, html) {
+    const q = $('quePaso');
+    q.innerHTML = '<span class="where ' + tipo + '">' + etiqueta + '</span>' + html;
+  }
+  function codigo(nombre) {
+    const s = SNIPPETS[nombre];
+    renderCode($('codigoLab'), s.file, s.lines, s.hl);
+  }
+
+  /* ---------- acciones (imitan ProductoService) ---------- */
+  const ACCIONES = {
+    buscar() {
+      const id = idSel;
+      const peticion = 'GET /api/productos/' + id;
+      codigo('buscarPorId');
+      NOTA('── ' + peticion);
+      if (porId.has(id)) {
+        cuenta.aciertos++;
+        const valor = porId.get(id);
+        responder(peticion, 200, json(valor));
+        const real = bd.has(id) ? dto(bd.get(id)) : null;
+        let extra = '';
+        if (!real || !iguales(real, valor)) {
+          desactualizados.add(id);
+          hecho('desactualizado');
+          extra = '<p><strong>Dato desactualizado.</strong> La tabla dice otra cosa (' +
+            (real ? 'precio ' + real.precio + ', stock ' + real.stock : 'el producto ya no existe') +
+            '), pero la caché no se ha enterado: el cambio no ha pasado por ningún método anotado.</p>';
+        } else {
+          if (ultimoPut === id) hecho('alDia');
+          if (desactualizados.has(id)) { desactualizados.delete(id); hecho('arreglado'); }
+        }
+        NOTA('(nada: el método no se ha ejecutado)');
+        explicar('Acierto de caché', '', '<p><code>@Cacheable</code> ha encontrado la clave <code>' + id + '</code> en <code>productoPorId</code> y ha devuelto el valor guardado <strong>sin ejecutar el método</strong>: ni log, ni SQL.</p>' + extra);
+        hecho('acierto');
+      } else {
+        cuenta.fallos++;
+        INFO('Consultando la base de datos: producto ' + id);
+        SQL('select p1_0.id,p1_0.descripcion,p1_0.fecha_creacion,p1_0.nombre,p1_0.precio,p1_0.stock from productos p1_0 where p1_0.id=?');
+        if (bd.has(id)) {
+          const valor = dto(bd.get(id));
+          porId.set(id, valor);
+          responder(peticion, 200, json(valor));
+          if (desactualizados.has(id)) { desactualizados.delete(id); hecho('arreglado'); }
+          explicar('Fallo de caché', 'fallo', '<p>La clave <code>' + id + '</code> no estaba en <code>productoPorId</code>: se ejecuta el método, consulta PostgreSQL y <code>@Cacheable</code> <strong>guarda el resultado</strong>. La próxima petición del ' + id + ' saldrá de la caché.</p>');
+        } else {
+          responder(peticion, 404, error(404, 'Not Found', 'No existe ningún producto con id ' + id, '/api/productos/' + id));
+          if (ultimo404 === id) hecho('error');
+          ultimo404 = id;
+          explicar('Fallo de caché · 404', 'error', '<p>El método ha lanzado <code>ProductoNoEncontradoException</code>. Como no ha terminado bien, <strong>no se guarda nada</strong> en la caché: la próxima petición volverá a consultar la base de datos.</p>');
+          pintarTodo(true);
+          return;
+        }
+      }
+      ultimo404 = null;
+      pintarTodo(true);
+    },
+
+    listar() {
+      const peticion = 'GET /api/productos';
+      codigo('listar');
+      NOTA('── ' + peticion);
+      if (lista) {
+        cuenta.aciertos++;
+        responder(peticion, 200, '[\n' + lista.map(d => '  ' + JSON.stringify(d)).join(',\n') + '\n]');
+        NOTA('(nada: el método no se ha ejecutado)');
+        const real = [...bd.values()].map(dto);
+        const viejo = !iguales(real, lista);
+        explicar('Acierto de caché', '', '<p><code>listaProductos</code> ya tenía la lista: se devuelve sin ir a la base de datos.</p>' +
+          (viejo ? '<p><strong>Dato desactualizado.</strong> La tabla ya no coincide con la lista guardada.</p>' : ''));
+        if (viejo) hecho('desactualizado');
+        hecho('acierto');
+      } else {
+        cuenta.fallos++;
+        INFO('Consultando la base de datos: todos los productos');
+        SQL('select p1_0.id,p1_0.descripcion,p1_0.fecha_creacion,p1_0.nombre,p1_0.precio,p1_0.stock from productos p1_0');
+        lista = Object.freeze([...bd.values()].map(dto));
+        responder(peticion, 200, '[\n' + lista.map(d => '  ' + JSON.stringify(d)).join(',\n') + '\n]');
+        if (listaVaciadaPorCrear) { hecho('lista'); listaVaciadaPorCrear = false; }
+        explicar('Fallo de caché', 'fallo', '<p>No había lista guardada: se consulta la tabla entera y <code>@Cacheable</code> la guarda en <code>listaProductos</code>.</p>');
+      }
+      pintarTodo(true);
+    },
+
+    vender() {
+      const id = idSel, cantidad = 2;
+      const peticion = 'POST /api/productos/' + id + '/ventas  {"cantidad": 2}';
+      codigo('vender');
+      NOTA('── ' + peticion);
+      SQL('select ... from productos p1_0 where p1_0.id=?');
+      const p = bd.get(id);
+      if (!p) {
+        responder(peticion, 404, error(404, 'Not Found', 'No existe ningún producto con id ' + id, '/api/productos/' + id + '/ventas'));
+        explicar('Error · la caché no cambia', 'error', '<p>El método ha lanzado <code>ProductoNoEncontradoException</code>. <code>@CachePut</code> y <code>@CacheEvict</code> solo actúan si el método termina bien.</p>');
+      } else if (p.stock < cantidad) {
+        responder(peticion, 409, error(409, 'Conflict', 'Stock insuficiente de \'' + p.nombre + '\': hay ' + p.stock + ' y se han pedido ' + cantidad, '/api/productos/' + id + '/ventas'));
+        explicar('Error · la caché no cambia', 'error', '<p>Regla de negocio: no hay stock suficiente y el método lanza <code>StockInsuficienteException</code>. Ni <code>@CachePut</code> ni <code>@CacheEvict</code> hacen nada: la caché queda como estaba.</p>');
+      } else {
+        p.stock -= cantidad;
+        SQL('update productos set descripcion=?,nombre=?,precio=?,stock=? where id=?');
+        const valor = dto(p);
+        porId.set(id, valor);
+        const habiaLista = lista !== null;
+        lista = null;
+        ultimoPut = id;
+        responder(peticion, 200, json(valor));
+        explicar('@CachePut + @CacheEvict', 'escritura', '<p>El método se ejecuta siempre. Al terminar, <code>@CachePut</code> guarda el producto con el stock nuevo en <code>productoPorId</code>' +
+          (habiaLista ? ' y <code>@CacheEvict(allEntries = true)</code> vacía <code>listaProductos</code>' : '; <code>listaProductos</code> estaba vacía') +
+          '. Fíjate en que no sale el log «Consultando…»: <code>vender()</code> no lo tiene.</p>');
+      }
+      pintarTodo(true);
+    },
+
+    actualizar() {
+      const id = idSel;
+      const p = bd.get(id);
+      const nuevo = p ? (Math.round(parseFloat(p.precio) * 90) / 100).toFixed(2) : '0.00';
+      const peticion = 'PUT /api/productos/' + id + '  (precio ' + nuevo + ')';
+      codigo('actualizar');
+      NOTA('── ' + peticion);
+      SQL('select ... from productos p1_0 where p1_0.id=?');
+      if (!p) {
+        responder(peticion, 404, error(404, 'Not Found', 'No existe ningún producto con id ' + id, '/api/productos/' + id));
+        explicar('Error · la caché no cambia', 'error', '<p><code>obtenerProducto()</code> lanza <code>ProductoNoEncontradoException</code>: ni <code>@CachePut</code> ni <code>@CacheEvict</code> llegan a actuar.</p>');
+      } else {
+        SQL('select p1_0.id from productos p1_0 where upper(p1_0.nombre)=upper(?) and p1_0.id<>? fetch first ? rows only');
+        p.precio = nuevo;
+        SQL('update productos set descripcion=?,nombre=?,precio=?,stock=? where id=?');
+        const valor = dto(p);
+        porId.set(id, valor);
+        lista = null;
+        ultimoPut = id;
+        responder(peticion, 200, json(valor));
+        explicar('@CachePut + @CacheEvict', 'escritura', '<p>Igual que al vender: <code>@CachePut</code> deja en <code>productoPorId</code> el producto con el precio nuevo, y la lista se vacía. La caché sigue al día porque el cambio <strong>ha pasado por la API</strong>.</p>');
+      }
+      pintarTodo(true);
+    },
+
+    eliminar() {
+      const id = idSel;
+      const peticion = 'DELETE /api/productos/' + id;
+      codigo('eliminar');
+      NOTA('── ' + peticion);
+      SQL('select count(*) from productos p1_0 where p1_0.id=?');
+      if (!bd.has(id)) {
+        responder(peticion, 404, error(404, 'Not Found', 'No existe ningún producto con id ' + id, '/api/productos/' + id));
+        explicar('Error · la caché no cambia', 'error', '<p><code>existsById</code> devuelve <code>false</code> y el método lanza <code>ProductoNoEncontradoException</code>: los <code>@CacheEvict</code> no se aplican.</p>');
+      } else {
+        SQL('delete from productos where id=?');
+        bd.delete(id);
+        porId.delete(id);
+        lista = null;
+        responder(peticion, 204, '');
+        explicar('@CacheEvict', 'escritura', '<p>El producto se borra de la tabla, <code>@CacheEvict(key = "#id")</code> quita la entrada <code>' + id + '</code> de <code>productoPorId</code> y la lista se vacía. Si vuelves a pedirlo, irá a la base de datos y recibirás un 404.</p>');
+      }
+      pintarTodo(true);
+    },
+
+    crear() {
+      const peticion = 'POST /api/productos  {"nombre": "Monitor", ...}';
+      codigo('crear');
+      NOTA('── ' + peticion);
+      SQL('select p1_0.id from productos p1_0 where upper(p1_0.nombre)=upper(?) fetch first ? rows only');
+      const existe = [...bd.values()].some(p => p.nombre.toLowerCase() === 'monitor');
+      if (existe) {
+        responder(peticion, 409, error(409, 'Conflict', 'Ya existe un producto con el nombre \'Monitor\'', '/api/productos'));
+        explicar('Error · la caché no cambia', 'error', '<p>Ya hay un «Monitor»: <code>ProductoDuplicadoException</code>. Como el método no termina bien, <code>@CacheEvict</code> no vacía la lista.</p>');
+      } else {
+        SQL('insert into productos (descripcion,fecha_creacion,nombre,precio,stock) values (?,?,?,?,?) returning id');
+        const p = { id: siguienteId++, nombre: 'Monitor', descripcion: 'Monitor 27 pulgadas', precio: '199.00', stock: 4, fechaCreacion: new Date().toISOString().slice(0, 19) };
+        bd.set(p.id, p);
+        if (lista !== null) listaVaciadaPorCrear = true;
+        const habiaLista = lista !== null;
+        lista = null;
+        responder(peticion, 201, json(dto(p)));
+        explicar('@CacheEvict', 'escritura', '<p>El producto nuevo tiene el id <code>' + p.id + '</code>. ' +
+          (habiaLista ? '<code>@CacheEvict(allEntries = true)</code> vacía <code>listaProductos</code>: la lista guardada ya no está completa.' : '<code>listaProductos</code> ya estaba vacía, así que no hay nada que invalidar.') +
+          ' <code>productoPorId</code> no cambia: nadie ha pedido aún el ' + p.id + '.</p>');
+        pintarSelector();
+      }
+      pintarTodo(true);
+    },
+
+    psql() {
+      const id = idSel;
+      const peticion = 'psql: update productos set precio = 1 where id = ' + id;
+      codigo('psql');
+      NOTA('── (en otra terminal) ' + peticion);
+      const p = bd.get(id);
+      if (p) p.precio = '1.00';
+      NOTA('(la aplicación no escribe nada: no se ha enterado)');
+      responder(peticion, 0, p ? 'UPDATE 1' : 'UPDATE 0');
+      explicar('Por fuera de la API', 'error', '<p>Has cambiado la tabla <strong>directamente</strong>, sin pasar por <code>ProductoService</code>. Ningún <code>@CachePut</code> ni <code>@CacheEvict</code> se ha ejecutado, así que la caché no lo sabe.' +
+        (p && porId.has(id) ? ' Ahora mismo <code>productoPorId</code> tiene un precio que ya no es el de la tabla: pide el ' + id + ' por la API.' : (p ? ' Como el ' + id + ' no estaba en la caché, la próxima lectura irá a la base de datos y lo verá bien.' : ' El ' + id + ' no existe: no ha cambiado nada.')) + '</p>');
+      pintarTodo(true);
+    },
+
+    reiniciar() {
+      codigo('reiniciar');
+      NOTA('── reinicio de la aplicación');
+      porId = new Map();
+      lista = null;
+      log('info', 'INFO  c.s.crud.CrudApplication : Started CrudApplication');
+      responder('Reiniciar la aplicación', 0, 'Las cachés "simple" viven en la memoria de la aplicación: al reiniciar empiezan vacías.\nLa base de datos no cambia.');
+      explicar('Reinicio', 'fallo', '<p>Las dos cachés se vacían. Es la forma bruta de «arreglar» un dato desactualizado con la caché <code>simple</code>, que no caduca nunca. Con Caffeine o Redis se configura una caducidad.</p>');
+      pintarTodo(true);
+    }
+  };
+
+  /* ---------- pintar el estado ---------- */
+  let anterior = {};
+  // Reinicia la animación aunque el elemento ya la tuviera
+  function destello(el) {
+    el.classList.remove('destello');
+    void el.offsetWidth;
+    el.classList.add('destello');
+  }
+  function pintarTodo(destacar) {
+    $('nAciertos').textContent = cuenta.aciertos;
+    $('nFallos').textContent = cuenta.fallos;
+    $('nConsultas').textContent = cuenta.consultas;
+
+    // productoPorId
+    const vp = $('vistaPorId');
+    vp.innerHTML = '';
+    if (porId.size === 0) {
+      vp.innerHTML = '<p class="vacio">Vacía</p>';
+    }
+    [...porId.keys()].sort((a, b) => a - b).forEach(id => {
+      const d = porId.get(id);
+      const fila = document.createElement('div');
+      fila.className = 'entrada';
+      const k = document.createElement('span'); k.className = 'clave'; k.textContent = id + ' →';
+      const v = document.createElement('span'); v.className = 'valor';
+      v.textContent = d.nombre + ' · ' + d.precio + ' € · stock ' + d.stock;
+      fila.append(k, v);
+      const real = bd.has(id) ? dto(bd.get(id)) : null;
+      if (!real || !iguales(real, d)) {
+        const c = document.createElement('span'); c.className = 'chip naranja'; c.textContent = 'desactualizado';
+        fila.appendChild(c);
+      }
+      const firma = JSON.stringify(d);
+      if (destacar && anterior['id' + id] !== firma) fila.classList.add('destello');
+      anterior['id' + id] = firma;
+      vp.appendChild(fila);
+    });
+
+    // listaProductos
+    const vl = $('vistaLista');
+    vl.innerHTML = '';
+    if (!lista) {
+      vl.innerHTML = '<p class="vacio">Vacía</p>';
+    } else {
+      const fila = document.createElement('div');
+      fila.className = 'entrada';
+      const k = document.createElement('span'); k.className = 'clave'; k.textContent = 'SimpleKey[] →';
+      const v = document.createElement('span'); v.className = 'valor';
+      v.textContent = lista.length + ' productos: ' + lista.map(d => d.nombre + ' (' + d.stock + ')').join(', ');
+      fila.append(k, v);
+      if (!iguales([...bd.values()].map(dto), lista)) {
+        const c = document.createElement('span'); c.className = 'chip naranja'; c.textContent = 'desactualizada';
+        fila.appendChild(c);
+      }
+      vl.appendChild(fila);
+    }
+    const firmaLista = JSON.stringify(lista);
+    if (destacar && anterior.lista !== firmaLista) destello(vl);
+    anterior.lista = firmaLista;
+
+    // tabla
+    const vt = $('vistaTabla');
+    vt.innerHTML = '';
+    if (bd.size === 0) {
+      vt.innerHTML = '<p class="vacio">(0 rows)</p>';
+    } else {
+      const t = document.createElement('table');
+      t.className = 'mini';
+      t.innerHTML = '<thead><tr><th>id</th><th>nombre</th><th>precio</th><th>stock</th></tr></thead>';
+      const tb = document.createElement('tbody');
+      [...bd.values()].forEach(p => {
+        const tr = document.createElement('tr');
+        [p.id, p.nombre, p.precio, p.stock].forEach((x, i) => {
+          const td = document.createElement('td');
+          td.textContent = x;
+          if (i !== 1) td.className = 'num-col';
+          const enCache = porId.get(p.id);
+          if (enCache && ((i === 2 && enCache.precio !== p.precio) || (i === 3 && enCache.stock !== p.stock))) {
+            td.innerHTML = '';
+            const s = document.createElement('span'); s.className = 'diferente'; s.textContent = x;
+            td.appendChild(s);
+          }
+          tr.appendChild(td);
+        });
+        const firma = JSON.stringify(p);
+        if (destacar && anterior['bd' + p.id] !== firma) tr.classList.add('destello');
+        anterior['bd' + p.id] = firma;
+        tb.appendChild(tr);
+      });
+      t.appendChild(tb);
+      vt.appendChild(t);
+    }
+
+    pintarRetos();
+  }
+
+  function pintarSelector() {
+    const sel = $('selector');
+    sel.innerHTML = '';
+    const ids = [...new Set([7, 8, ...bd.keys(), 99])].sort((a, b) => a - b);
+    ids.forEach(id => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip-btn';
+      b.textContent = id === 99 ? '99 · no existe' : String(id);
+      b.setAttribute('aria-pressed', String(id === idSel));
+      b.addEventListener('click', () => { idSel = id; pintarSelector(); });
+      sel.appendChild(b);
+    });
+    document.querySelectorAll('.id-sel').forEach(e => e.textContent = idSel);
+  }
+
+  /* ---------- retos ---------- */
+  function hecho(id) {
+    if (retosHechos.has(id)) return;
+    retosHechos.add(id);
+    Progreso.guardar('cache', { retos: [...retosHechos] });
+  }
+  function pintarRetos() {
+    const ol = $('retos');
+    ol.innerHTML = '';
+    RETOS.forEach(r => {
+      const li = document.createElement('li');
+      if (retosHechos.has(r.id)) li.classList.add('hecho');
+      const div = document.createElement('div');
+      div.textContent = r.texto;
+      const small = document.createElement('small');
+      small.textContent = 'Pista: ' + r.pista;
+      div.appendChild(small);
+      li.appendChild(div);
+      ol.appendChild(li);
+    });
+    $('retosScore').textContent = retosHechos.size + ' de ' + RETOS.length;
+  }
+
+  document.querySelectorAll('[data-accion]').forEach(b =>
+    b.addEventListener('click', () => ACCIONES[b.dataset.accion]()));
+  $('deCero').addEventListener('click', () => { deCero(); pintarSelector(); });
+
+  deCero();
+  pintarSelector();
+})();
+
+/* ---------------- autoevaluación ---------------- */
+crearTest([
+  { q: 'Añades @Cacheable a buscarPorId() pero olvidas @EnableCaching. ¿Qué pasa?',
+    opts: ['La aplicación no arranca', 'Salta una excepción la primera vez que se llama', 'Todo funciona, pero no se cachea nada', 'Se cachea igualmente'], ok: 2,
+    why: 'Sin @EnableCaching, Spring no crea el proxy que mira la caché y las anotaciones se ignoran sin ningún aviso. Por eso es el fallo más común.' },
+  { q: '¿Qué diferencia a @CachePut de @Cacheable?',
+    opts: ['@CachePut ejecuta siempre el método y guarda el resultado', '@CachePut borra la entrada de la caché', '@CachePut solo funciona con listas', 'Ninguna, son sinónimos'], ok: 0,
+    why: '@Cacheable se salta el método si el dato ya está. @CachePut lo ejecuta siempre y sustituye el valor guardado: por eso se usa al actualizar.' },
+  { q: 'Si crear() no tuviera @CacheEvict sobre listaProductos, ¿qué vería quien pide la lista justo después de crear un producto?',
+    opts: ['La lista con el producto nuevo', 'La lista antigua, sin el producto nuevo', 'Un error 500', 'Una lista vacía'], ok: 1,
+    why: 'listar() seguiría devolviendo lo que tenía guardado hasta que se reiniciara la aplicación: la caché no sabe que la tabla ha cambiado.' },
+  { q: 'Pides el producto 7, cambias su precio desde psql y lo vuelves a pedir por la API. ¿Qué precio sale?',
+    opts: ['El nuevo, porque está en la base de datos', 'El antiguo, porque sale de la caché', 'Ninguno: devuelve 404', 'Depende de @Transactional'], ok: 1,
+    why: 'La caché solo se entera de los cambios que pasan por los métodos anotados. Un cambio hecho por fuera la deja desactualizada.' },
+  { q: 'buscarPorId(99) lanza ProductoNoEncontradoException. ¿Qué se guarda en productoPorId?',
+    opts: ['Un null con la clave 99', 'La excepción, para no volver a lanzarla', 'Nada', 'Un 404'], ok: 2,
+    why: 'Si el método lanza una excepción, @Cacheable no guarda nada. La próxima petición del 99 volverá a consultar la base de datos.' },
+  { q: 'Dentro de ProductoService, otro método llama a this.buscarPorId(7). ¿Usa la caché?',
+    opts: ['Sí, siempre', 'No: la llamada interna no pasa por el proxy de Spring', 'Solo si el método es público', 'Solo la segunda vez'], ok: 1,
+    why: 'La caché la aplica un proxy que envuelve al servicio. Una llamada con this va directa al objeto, sin pasar por el proxy, y lo mismo le pasa a @Transactional.' },
+  { q: '¿Por qué conviene cachear ProductoResponse (un record) y no la entidad Producto?',
+    opts: ['Porque ocupa menos memoria', 'Porque es inmutable: nadie puede modificar sin querer lo que hay en la caché', 'Porque Spring no puede cachear clases normales', 'Porque los record son más rápidos'], ok: 1,
+    why: 'Todas las peticiones reciben el mismo objeto guardado. Si tuviera setters, cualquier código podría cambiarlo y estropear la caché para todos.' },
+  { q: 'Tu aplicación se ejecuta en tres servidores y todos tienen que ver la misma caché. ¿Qué usarías?',
+    opts: ['La caché simple', 'Caffeine', 'Redis', 'Un HashMap estático'], ok: 2,
+    why: 'simple y Caffeine viven en la memoria de cada aplicación, así que cada servidor tendría la suya. Redis es un servidor aparte que comparten todos.' }
+], { quiz: document.getElementById('quiz'), score: document.getElementById('score'), leccion: 'cache' });
+
+iniciarLeccion('cache');
+</script>
+</body>
+</html>
