@@ -153,7 +153,7 @@
     </div>
   </div>
   <h3>El formato común: <code>RespuestaError</code></h3>
-  <p>Todos los errores de la API tienen la misma forma. Es un DTO más (lección 02): un <code>record</code> pensado para lo que necesita el cliente.</p>
+  <p>Todos los errores de la API tienen la misma forma. Es un DTO más (lección 02): un <code>record</code> pensado para lo que necesita el cliente. El mapa <code>errores</code> solo se rellena en los errores de validación; en los demás va vacío.</p>
   <div class="dos">
     <div class="code" data-snippet="respuestaError"></div>
     <div class="code" data-snippet="jsonError"></div>
@@ -351,7 +351,7 @@ const SNIPPETS = {
     '        String error,',
     '        String mensaje,',
     '        String ruta,',
-    '        Map<String, String> errores) {   // solo en los errores de validación',
+    '        Map<String, String> errores) {',
     '}'] },
   jsonError: { file: 'Respuesta de un error (de la API real)', hl: [2, 4], lines: [
     '{',
@@ -419,7 +419,7 @@ document.querySelectorAll('[data-snippet]').forEach(el => {
     { id: '500', etiqueta: 'BD caída', estado: 500, peticion: 'GET /api/productos/1  (con PostgreSQL parado)', origen: 'service', excepcion: 'CannotCreateTransactionException', metodo: 'manejarErrorInesperado() · log.error',
       codigoOrigen: { file: 'Log de la aplicación (real)', hl: [0, 2], lines: ['ERROR c.s.c.e.ManejadorGlobalExcepciones : Error inesperado en GET /api/productos/1', '', 'org.springframework.transaction.CannotCreateTransactionException:', '    Could not open JPA EntityManager for transaction', '    ... (la traza completa, solo en el log)'] },
       nace: '<p>Antes de entrar en <code>buscarPorId()</code>, <code>@Transactional</code> intenta abrir una transacción… y PostgreSQL no responde. Spring lanza <code>CannotCreateTransactionException</code>. Nadie la esperaba: es un fallo del <strong>servidor</strong>.</p>',
-      hl: [26, 27, 32, 33], atrapa: '<p>Cae en <code>Exception.class</code>. No es una excepción de Spring MVC con código propio, así que se <strong>guarda entera en el log</strong> (es lo que ves en el código de al lado) y al cliente se le da un mensaje <strong>genérico</strong>: nada de SQL ni de nombres internos.</p>',
+      hl: [26, 27, 32, 33], atrapa: '<p>Cae en <code>Exception.class</code>. No es una excepción de Spring MVC con código propio, así que se <strong>guarda entera en el log</strong> (es la línea <code>log.error</code> resaltada en el código) y al cliente se le da un mensaje <strong>genérico</strong>: nada de SQL ni de nombres internos.</p>',
       respuesta: error(500, 'Internal Server Error', 'Ha ocurrido un error inesperado', '/api/productos/1') }
   ];
 
