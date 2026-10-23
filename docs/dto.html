@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lección 02 · Patrón DTO · SASE Formación</title>
+<meta name="description" content="El patrón DTO en Spring Boot: records de entrada y de salida y validación con @Valid, con un validador en vivo que imita al de la API.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/sase.css">
+<style>
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+.dos > * { min-width: 0; }
+@media (max-width: 860px) { .dos { grid-template-columns: 1fr; } }
+.card h3:first-child { margin-top: 0; }
+
+/* comparación de campos */
+table.campos td.si-campo { color: var(--teal); font-weight: 600; text-align: center; }
+table.campos td.no-campo { color: var(--line); text-align: center; }
+table.campos th:not(:first-child) { text-align: center; }
+table.campos th { text-transform: none; letter-spacing: 0; font-size: .78rem; }
+table.campos td small { display: block; color: var(--muted); font-weight: 400; font-size: .76rem; }
+
+/* validador */
+.validador { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 18px; margin-top: 22px; align-items: start; }
+@media (max-width: 900px) { .validador { grid-template-columns: 1fr; } }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.presets .chip-btn { min-height: 34px; padding: 3px 12px; font-size: .82rem; }
+.editor { display: grid; gap: 8px; align-content: start; }
+.editor .peticion { font: 500 .8rem var(--mono); color: var(--blue); }
+.editor textarea {
+  width: 100%; min-height: 230px; resize: vertical;
+  background: var(--code-bg); color: var(--code-text); border: 0; border-radius: 16px;
+  padding: 16px; font: 400 .86rem/1.6 var(--mono);
+}
+.editor textarea:focus { outline: 2px solid var(--teal); outline-offset: 2px; }
+.resultado { display: grid; gap: 14px; align-content: start; }
+.lectura { display: grid; gap: 2px; font-size: .88rem; }
+.lectura div { display: grid; grid-template-columns: minmax(0, .8fr) auto minmax(0, 1.4fr); gap: 8px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.lectura div:last-child { border-bottom: 0; }
+.lectura .k { font: 500 .8rem var(--mono); overflow-wrap: anywhere; }
+.lectura .flecha-txt { color: var(--muted); }
+.lectura .ignorado { color: var(--muted); }
+.lectura .ignorado .k { text-decoration: line-through; }
+.lectura .falta { color: #A35F0D; }
+.reglas { display: grid; gap: 10px; }
+.regla-campo h5 { margin: 0 0 4px; font: 500 .78rem var(--mono); color: var(--blue); }
+.regla { display: flex; gap: 8px; align-items: baseline; font-size: .86rem; padding: 2px 0; }
+.regla .m { flex: none; width: 1.2em; font-weight: 600; text-align: center; }
+.regla.ok .m { color: var(--teal); }
+.regla.mal .m { color: var(--error); }
+.regla code { font-size: .78rem; }
+.regla small { color: var(--muted); }
+.nota-servicio { font-size: .9rem; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html" title="Índice de lecciones"><img src="sase_logo_rectangular.png" alt="SASE Formación"><span>Lección 02 · DTO</span></a>
+    <nav class="nav" aria-label="Secciones">
+      <a href="#problema">El problema</a>
+      <a href="#solucion">La solución</a>
+      <a href="#record">record</a>
+      <a href="#validador">Validador</a>
+      <a href="#anotaciones">Anotaciones</a>
+      <a href="#donde">Dónde se usan</a>
+      <a href="#test">Autoevaluación</a>
+      <a href="#resumen">Resumen</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero-band">
+<div class="hero">
+  <div class="kicker">Lección 02 · Spring Boot · Proyecto CRUD de productos</div>
+  <h1>El patrón DTO</h1>
+  <p class="lead">Qué es un DTO (<em>Data Transfer Object</em>) y qué problemas tiene exponer la entidad directamente, por qué hay uno para lo que entra y otro para lo que sale, qué es un <code>record</code> y cómo validar los datos con <code>@Valid</code>.</p>
+  <div class="callout key">
+    <strong>La idea en una frase</strong>
+    Una clase para cada trabajo: la entidad para la tabla, un DTO para lo que entra y otro para lo que sale.
+  </div>
+</div>
+</div>
+
+<main>
+
+<!-- ================= PROBLEMA ================= -->
+<section id="problema">
+  <div class="kicker">01 · El problema</div>
+  <h2>La entidad hacía de todo</h2>
+  <p class="lead">En la versión básica, el controlador recibía y devolvía directamente la entidad <code>Producto</code>. Funciona, pero la misma clase hacía tres trabajos a la vez: <strong>tabla</strong>, <strong>JSON de entrada</strong> y <strong>JSON de salida</strong>.</p>
+  <div class="code flotante" data-snippet="antes"></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Problema</th><th>Ejemplo en este proyecto</th></tr></thead>
+      <tbody>
+        <tr><td>El cliente puede mandar campos que no debería</td><td>Podría enviar <code>"id": 3</code> o <code>"fechaCreacion": "2000-01-01"</code> y colarlos en la base de datos.</td></tr>
+        <tr><td>Cambiar la tabla cambia la API</td><td>Renombrar la columna <code>stock</code> rompería a todas las apps que usan el JSON.</td></tr>
+        <tr><td>No se pueden añadir campos calculados</td><td>¿Dónde pongo <code>disponible</code> (stock &gt; 0) si no es una columna?</td></tr>
+        <tr><td>Se expone todo</td><td>Si mañana la entidad tiene <code>precioCoste</code> o una contraseña, saldría en el JSON.</td></tr>
+        <tr><td>Problemas con relaciones</td><td>Con relaciones JPA (<code>@OneToMany</code>…) aparecen bucles infinitos al convertir a JSON y errores de carga perezosa.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ================= SOLUCIÓN ================= -->
+<section id="solucion">
+  <div class="kicker">02 · La solución</div>
+  <h2>Una clase para cada trabajo</h2>
+  <p class="lead">Un <strong>DTO</strong> es una clase cuyo único fin es <strong>transportar datos</strong> entre capas o hacia fuera. No tiene lógica ni está ligada a la base de datos.</p>
+  <div class="ruta" style="grid-template-columns: max-content minmax(0,.8fr) auto minmax(0,1.1fr) auto minmax(0,1fr) auto minmax(0,1.1fr) auto minmax(0,.8fr)" role="img" aria-label="El JSON entra como ProductoRequest, el servicio trabaja con la entidad Producto y devuelve un ProductoResponse que sale como JSON">
+    <div class="ruta-fila">
+      <span class="etq">Un POST</span>
+      <div class="paso" style="--c: var(--c-cliente); --t: var(--tint-cliente)">JSON<small>del cliente</small></div><span class="fl"></span>
+      <div class="paso" style="--c: var(--c-controller); --t: var(--tint-controller)">ProductoRequest<small>lo que ENTRA</small></div><span class="fl"></span>
+      <div class="paso" style="--c: var(--c-model); --t: var(--tint-model)">Producto<small>la entidad, solo en el servicio</small></div><span class="fl vuelta"></span>
+      <div class="paso" style="--c: var(--c-controller); --t: var(--tint-controller)">ProductoResponse<small>lo que SALE</small></div><span class="fl vuelta"></span>
+      <div class="paso si">JSON<small>al cliente</small></div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="campos">
+      <thead><tr><th>Campo</th><th>ProductoRequest</th><th>Producto (entidad)</th><th>ProductoResponse</th></tr></thead>
+      <tbody>
+        <tr><td><code>id</code><small>lo genera la base de datos</small></td><td class="no-campo">—</td><td class="si-campo">✔</td><td class="si-campo">✔</td></tr>
+        <tr><td><code>nombre</code></td><td class="si-campo">✔</td><td class="si-campo">✔</td><td class="si-campo">✔</td></tr>
+        <tr><td><code>descripcion</code></td><td class="si-campo">✔</td><td class="si-campo">✔</td><td class="si-campo">✔</td></tr>
+        <tr><td><code>precio</code></td><td class="si-campo">✔</td><td class="si-campo">✔</td><td class="si-campo">✔</td></tr>
+        <tr><td><code>stock</code></td><td class="si-campo">✔</td><td class="si-campo">✔</td><td class="si-campo">✔</td></tr>
+        <tr><td><code>fechaCreacion</code><small>la pone el servicio</small></td><td class="no-campo">—</td><td class="si-campo">✔</td><td class="si-campo">✔</td></tr>
+        <tr><td><code>disponible</code><small>calculado: stock &gt; 0</small></td><td class="no-campo">—</td><td class="no-campo">—</td><td class="si-campo">✔</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul style="margin-top:16px">
+    <li><code>ProductoRequest</code> no tiene <code>id</code> ni <code>fechaCreacion</code>: es <strong>imposible</strong> que el cliente los envíe, porque no hay dónde ponerlos. Si vienen en el JSON, se ignoran.</li>
+    <li><code>ProductoResponse</code> añade <code>disponible</code>, que no existe en la tabla.</li>
+    <li>La entidad solo se ocupa de la tabla, y ya <strong>no sale del servicio</strong>.</li>
+  </ul>
+</section>
+
+<!-- ================= RECORD ================= -->
+<section id="record">
+  <div class="kicker">03 · Java</div>
+  <h2>Los DTOs del proyecto son <code>record</code></h2>
+  <p class="lead">Un <code>record</code> (Java 16+) es una clase pensada para <strong>llevar datos</strong>. Con unas pocas líneas, Java genera solo el constructor, un método para leer cada campo, y <code>equals()</code>, <code>hashCode()</code> y <code>toString()</code>.</p>
+  <div class="controls">
+    <button class="btn primary" type="button" id="verRecord" aria-pressed="true">El record</button>
+    <button class="btn" type="button" id="verClase" aria-pressed="false">Lo que Java genera por ti</button>
+  </div>
+  <div class="code" id="codigoRecord"></div>
+  <div class="dos">
+    <div class="callout warn" style="margin:0">
+      <strong>Ojo al leer un campo</strong>
+      El método se llama <code>response.nombre()</code>, no <code>getNombre()</code>.
+    </div>
+    <div class="callout" style="margin:0">
+      <strong>Inmutable</strong>
+      Los campos son <code>final</code> y no hay <em>setters</em>: una vez creado, no cambia. Es una «foto» de los datos, justo lo que se quiere en un DTO.
+    </div>
+  </div>
+  <p style="margin-top:18px"><strong>¿Por qué la entidad <code>Producto</code> no es un <code>record</code>?</strong> Porque JPA necesita un constructor vacío y poder modificar los campos (por eso tiene <em>setters</em>). Entidad → clase normal; DTO → <code>record</code>. Spring y Jackson (la librería que convierte JSON ↔ Java) entienden los <code>record</code> sin configurar nada.</p>
+</section>
+
+<!-- ================= VALIDADOR ================= -->
+<section id="validador">
+  <div class="kicker">04 · Validador en vivo</div>
+  <h2>Escribe el JSON y mira qué haría la API</h2>
+  <p class="lead">Este validador imita lo que pasa al llegar un <code>POST /api/productos</code>: cómo lee Jackson el JSON, qué anotaciones de <code>ProductoRequest</code> se cumplen y qué respuesta recibiría el cliente. Edita el JSON o empieza por uno de los ejemplos.</p>
+
+  <div class="validador">
+    <div class="editor">
+      <div class="presets" id="presets" role="group" aria-label="Ejemplos"></div>
+      <span class="peticion">POST /api/productos · Content-Type: application/json</span>
+      <textarea id="json" spellcheck="false" aria-label="Cuerpo de la petición en JSON"></textarea>
+      <p class="vacio" style="margin:0">En la tabla ya existen «Teclado» y «Ratón».</p>
+    </div>
+    <div class="resultado" aria-live="polite">
+      <div class="panel">
+        <h4>01 · Cómo lo lee Jackson</h4>
+        <div class="lectura" id="lectura"></div>
+      </div>
+      <div class="panel">
+        <h4><span>02 · Anotaciones de <code>ProductoRequest</code></span></h4>
+        <div class="reglas" id="reglas"></div>
+      </div>
+      <div class="panel">
+        <h4>03 · Respuesta</h4>
+        <div id="respuesta"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ANOTACIONES ================= -->
+<section id="anotaciones">
+  <div class="kicker">05 · Validación</div>
+  <h2>Comprobar los datos al entrar</h2>
+  <p class="lead">Como <code>ProductoRequest</code> representa justo lo que llega del cliente, es el sitio ideal para decir qué datos son válidos. Las anotaciones por sí solas no hacen nada: hay que pedir que se comprueben con <strong><code>@Valid</code></strong> en el controlador.</p>
+  <div class="dos">
+    <div class="code" data-snippet="request"></div>
+    <div>
+      <div class="code" data-snippet="controller"></div>
+      <p>Si algún campo no cumple, Spring lanza <code>MethodArgumentNotValidException</code> <strong>antes de entrar en el método</strong>: el servicio ni se entera. El manejador de la lección 04 la convierte en un <strong>400</strong> con la lista de errores.</p>
+    </div>
+  </div>
+
+  <h3>Anotaciones de validación más usadas</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Anotación</th><th>Comprueba</th><th>Para</th></tr></thead>
+      <tbody>
+        <tr><td><code>@NotNull</code></td><td>que no sea <code>null</code></td><td>cualquier tipo</td></tr>
+        <tr><td><code>@NotBlank</code></td><td>que no sea <code>null</code>, ni <code>""</code>, ni solo espacios</td><td><code>String</code></td></tr>
+        <tr><td><code>@NotEmpty</code></td><td>que no sea <code>null</code> ni esté vacío</td><td><code>String</code>, listas</td></tr>
+        <tr><td><code>@Size(min, max)</code></td><td>longitud</td><td><code>String</code>, listas</td></tr>
+        <tr><td><code>@Positive</code> · <code>@PositiveOrZero</code></td><td>&gt; 0 · ≥ 0</td><td>números</td></tr>
+        <tr><td><code>@Min</code> · <code>@Max</code></td><td>valor mínimo · máximo</td><td>números</td></tr>
+        <tr><td><code>@Digits(integer, fraction)</code></td><td>número de cifras</td><td><code>BigDecimal</code></td></tr>
+        <tr><td><code>@Email</code></td><td>formato de email</td><td><code>String</code></td></tr>
+        <tr><td><code>@Pattern(regexp)</code></td><td>que encaje con una expresión regular</td><td><code>String</code></td></tr>
+        <tr><td><code>@Past</code> · <code>@Future</code></td><td>fecha pasada · futura</td><td>fechas</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="dos">
+    <div class="callout key" style="margin:0">
+      <strong>DTO o servicio</strong>
+      El DTO comprueba que los datos tienen <strong>buena forma</strong> sin mirar nada más («el precio es positivo»). Las reglas que necesitan la base de datos («el nombre no está repetido», «hay stock») van en el <strong>servicio</strong>. Lo has visto en el validador con «teclado».
+    </div>
+    <div class="callout" style="margin:0">
+      <strong>¿Y el nullable = false de la entidad?</strong>
+      <code>@Column(nullable = false)</code> solo define cómo se crea la tabla. Antes, un <code>null</code> llegaba a PostgreSQL y la respuesta era un <strong>500</strong>. Con la validación del DTO el error se detecta antes y es un <strong>400</strong> que dice qué campo está mal. La base de datos queda como última barrera.
+    </div>
+  </div>
+</section>
+
+<!-- ================= DÓNDE ================= -->
+<section id="donde">
+  <div class="kicker">06 · En el proyecto</div>
+  <h2>¿Dónde se usan los DTOs?</h2>
+  <div class="ruta" style="grid-template-columns: max-content minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr)" role="img" aria-label="Entre el controlador y el servicio viajan DTOs; entre el servicio y el repositorio, entidades">
+    <div class="ruta-fila">
+      <span class="etq">Viajan</span>
+      <div class="paso" style="--c: var(--c-controller); --t: var(--tint-controller)">Controller<small>solo conoce DTOs</small></div>
+      <div class="salto" style="color: var(--blue)">DTOs</div>
+      <div class="paso" style="--c: var(--c-service); --t: var(--tint-service)">Service<small>recibe y devuelve DTOs; dentro, entidades</small></div>
+      <div class="salto" style="color: #2C667C">entidades</div>
+      <div class="paso" style="--c: var(--c-repository); --t: var(--tint-repository)">Repository<small>solo conoce entidades</small></div>
+    </div>
+  </div>
+  <p>La conversión entre unos y otros la hace el <strong>mapper</strong>, que es la siguiente lección.</p>
+
+  <h3>Un DTO no tiene que parecerse a la entidad</h3>
+  <p>El endpoint de ventas solo necesita un dato, así que su DTO solo tiene uno. Y <code>RespuestaError</code> (lección 04) es un DTO que no tiene nada que ver con ninguna tabla. Los DTOs se diseñan pensando en <strong>qué necesita el cliente</strong>, no en cómo es la base de datos.</p>
+  <div class="code flotante" data-snippet="venta"></div>
+
+  <h3>Cómo comprobarlo</h3>
+  <p>En <a href="https://github.com/gsanox/crud-springboot/blob/main/docs/peticiones.http"><code>peticiones.http</code></a>, sección <em>Lección 2</em>. El test <code>ProductoControllerTest.datosNoValidosDevuelven400SinLlegarAlServicio</code> comprueba además que el servicio <strong>no se llega a llamar</strong> (<code>verifyNoInteractions</code>).</p>
+
+  <h3>Errores típicos</h3>
+  <div class="grid cols-2">
+    <div class="card"><b class="dont">Olvidar @Valid.</b> Las anotaciones se ignoran sin dar ningún error, y se cuelan datos inválidos.</div>
+    <div class="card"><b class="dont">Llamar a request.getNombre()</b> en un <code>record</code>. El método se llama <code>request.nombre()</code>.</div>
+    <div class="card"><b class="dont">@NotNull en un String obligatorio.</b> Dejaría pasar <code>""</code> y <code>"   "</code>. Para textos, <code>@NotBlank</code>.</div>
+    <div class="card"><b class="dont">@NotBlank en un número.</b> Es solo para textos; en números, <code>@NotNull</code>.</div>
+    <div class="card"><b class="dont">Devolver la entidad «solo en este endpoint».</b> En cuanto un endpoint la expone, vuelven todos los problemas.</div>
+  </div>
+</section>
+
+<!-- ================= TEST ================= -->
+<section id="test">
+  <div class="kicker">07 · Autoevaluación</div>
+  <h2>¿Lo has pillado? Comprueba</h2>
+  <p class="lead">Pulsa una respuesta. Si fallas, lee la explicación: es donde más se aprende. <span class="score" id="score"></span></p>
+  <div class="quiz" id="quiz"></div>
+</section>
+
+<!-- ================= RESUMEN ================= -->
+<section id="resumen" class="summary">
+  <div class="kicker">08 · Para repasar</div>
+  <h2>Si solo te quedas con 5 ideas</h2>
+  <div class="card">
+    <ol>
+      <li>Un <strong>DTO</strong> solo transporta datos. Uno para lo que <strong>entra</strong> (<code>ProductoRequest</code>) y otro para lo que <strong>sale</strong> (<code>ProductoResponse</code>).</li>
+      <li>Lo que el cliente no debe decidir (<code>id</code>, <code>fechaCreacion</code>) <strong>no existe</strong> en el DTO de entrada.</li>
+      <li>Los DTOs son <strong><code>record</code></strong>: inmutables, y se leen con <code>nombre()</code>. La entidad sigue siendo una clase normal.</li>
+      <li>Las anotaciones del DTO solo se comprueban con <strong><code>@Valid</code></strong>; si fallan, 400 y el servicio ni se entera.</li>
+      <li>El DTO valida la <strong>forma</strong>; el servicio, las <strong>reglas</strong> que necesitan la base de datos.</li>
+    </ol>
+  </div>
+</section>
+
+<nav class="lesson-nav" id="lessonNav" aria-label="Lecciones"></nav>
+
+</main>
+
+<footer>Lecciones del proyecto <code>crud</code> (Spring Boot 4 · PostgreSQL) · DAM · DAW<br><a href="https://saseformacion.es">sase<span>_</span> Formación</a> · saseformacion.es</footer>
+
+<script src="assets/lecciones.js"></script>
+<script>
+/* ---------------- código real del proyecto ---------------- */
+const SNIPPETS = {
+  antes: { file: 'controller/ProductoController.java (versión básica, antes)', hl: [1], lines: [
+    '@PostMapping',
+    'public Producto crear(@RequestBody Producto producto) { ... }'] },
+  record: { file: 'dto/ProductoResponse.java', hl: [0], lines: [
+    'public record ProductoResponse(',
+    '        Long id,',
+    '        String nombre,',
+    '        String descripcion,',
+    '        BigDecimal precio,',
+    '        Integer stock,',
+    '        boolean disponible,',
+    '        LocalDateTime fechaCreacion) {',
+    '}'] },
+  clase: { file: 'Lo que equivale a ese record (resumido)', hl: [2, 5, 15, 21], lines: [
+    'public final class ProductoResponse {',
+    '',
+    '    private final Long id;',
+    '    private final String nombre;',
+    '    // ... un campo final por cada componente',
+    '    public ProductoResponse(Long id, String nombre, String descripcion, BigDecimal precio,',
+    '                            Integer stock, boolean disponible, LocalDateTime fechaCreacion) {',
+    '        this.id = id;',
+    '        this.nombre = nombre;',
+    '        // ...',
+    '    }',
+    '',
+    '    public Long id() { return id; }',
+    '    public String nombre() { return nombre; }',
+    '    // ... un método de lectura por campo (sin "get")',
+    '    // y ningún setter',
+    '',
+    '    @Override public boolean equals(Object o) { ... }   // iguales si todos los campos son iguales',
+    '    @Override public int hashCode() { ... }',
+    '    @Override public String toString() { ... }           // ProductoResponse[id=7, nombre=Teclado, ...]',
+    '',
+    '}'] },
+  request: { file: 'dto/ProductoRequest.java', hl: [2, 3, 9, 10, 11, 14, 15], lines: [
+    'public record ProductoRequest(',
+    '',
+    '        @NotBlank(message = "El nombre es obligatorio")',
+    '        @Size(max = 100, message = "El nombre no puede tener más de 100 caracteres")',
+    '        String nombre,',
+    '',
+    '        @Size(max = 500, message = "La descripción no puede tener más de 500 caracteres")',
+    '        String descripcion,',
+    '',
+    '        @NotNull(message = "El precio es obligatorio")',
+    '        @Positive(message = "El precio tiene que ser mayor que 0")',
+    '        @Digits(integer = 8, fraction = 2, message = "El precio admite como mucho 8 cifras enteras y 2 decimales")',
+    '        BigDecimal precio,',
+    '',
+    '        @NotNull(message = "El stock es obligatorio")',
+    '        @PositiveOrZero(message = "El stock no puede ser negativo")',
+    '        Integer stock) {',
+    '}'] },
+  controller: { file: 'controller/ProductoController.java', hl: [3], lines: [
+    '// @Valid comprueba las anotaciones de ProductoRequest antes de entrar en el método',
+    '@PostMapping',
+    '@ResponseStatus(HttpStatus.CREATED)',
+    'public ProductoResponse crear(@Valid @RequestBody ProductoRequest request) {',
+    '    return productoService.crear(request);',
+    '}'] },
+  venta: { file: 'dto/VentaRequest.java', hl: [4, 5, 6], lines: [
+    '/**',
+    ' * Cuerpo de POST /api/productos/{id}/ventas: cuántas unidades se venden.',
+    ' * Un DTO no tiene por qué parecerse a una entidad: este solo lleva un dato.',
+    ' */',
+    'public record VentaRequest(',
+    '        @NotNull(message = "La cantidad es obligatoria")',
+    '        @Positive(message = "La cantidad tiene que ser mayor que 0")',
+    '        Integer cantidad) {',
+    '}'] }
+};
+document.querySelectorAll('[data-snippet]').forEach(el => {
+  const s = SNIPPETS[el.dataset.snippet];
+  renderCode(el, s.file, s.lines, s.hl);
+});
+
+/* record ↔ clase equivalente */
+(function () {
+  const caja = document.getElementById('codigoRecord');
+  const bR = document.getElementById('verRecord'), bC = document.getElementById('verClase');
+  function ver(cual) {
+    const s = SNIPPETS[cual];
+    renderCode(caja, s.file, s.lines, s.hl);
+    bR.setAttribute('aria-pressed', String(cual === 'record'));
+    bC.setAttribute('aria-pressed', String(cual === 'clase'));
+    bR.classList.toggle('primary', cual === 'record');
+    bC.classList.toggle('primary', cual === 'clase');
+  }
+  bR.addEventListener('click', () => ver('record'));
+  bC.addEventListener('click', () => ver('clase'));
+  ver('record');
+})();
+
+/* ---------------- validador ----------------
+   Imita a Jackson (lectura del JSON) y a Bean Validation (anotaciones de ProductoRequest). */
+(function () {
+  const $ = id => document.getElementById(id);
+  const EXISTENTES = ['teclado', 'ratón'];
+  const PRESETS = [
+    ['Correcto', { nombre: 'Monitor', descripcion: '27 pulgadas', precio: 199.00, stock: 4 }],
+    ['Colar id y fecha', { id: 999, fechaCreacion: '2000-01-01T00:00:00', nombre: 'Webcam', precio: 39.90, stock: 0 }],
+    ['Campos vacíos', { nombre: '   ', precio: -5 }],
+    ['Tres decimales', { nombre: 'Monitor', precio: 199.999, stock: 3 }],
+    ['Precio en texto', { nombre: 'Auriculares', precio: '24.90', stock: 7 }],
+    ['Tipo incorrecto', { nombre: 'Ratón', precio: 'caro', stock: 1 }],
+    ['JSON roto', null],
+    ['Nombre repetido', { nombre: 'teclado', precio: 10, stock: 1 }]
+  ];
+  const CAMPOS = ['nombre', 'descripcion', 'precio', 'stock'];
+
+  function escribir(obj) {
+    $('json').value = obj === null ? '{\n  "nombre": "Ratón",\n  "precio": 19.90\n' : JSON.stringify(obj, null, 2).replace('"precio": 199,', '"precio": 199.00,');
+    analizar();
+  }
+
+  function fila(clase, clave, destino) {
+    const d = document.createElement('div');
+    if (clase) d.className = clase;
+    const k = document.createElement('span'); k.className = 'k'; k.textContent = clave;
+    const f = document.createElement('span'); f.className = 'flecha-txt'; f.textContent = '→';
+    const v = document.createElement('span'); v.innerHTML = destino;
+    d.append(k, f, v);
+    return d;
+  }
+
+  function responder(estado, texto, cuerpo, nota) {
+    const caja = $('respuesta');
+    caja.innerHTML = '';
+    const chip = document.createElement('span');
+    chip.className = 'estado-http' + (estado >= 400 ? ' err' : '');
+    chip.textContent = estado + ' ' + texto;
+    const pre = document.createElement('pre');
+    pre.className = 'respuesta-http';
+    pre.style.marginTop = '10px';
+    pre.textContent = cuerpo;
+    caja.append(chip, pre);
+    if (nota) {
+      const p = document.createElement('p');
+      p.className = 'nota-servicio';
+      p.innerHTML = nota;
+      caja.appendChild(p);
+    }
+  }
+
+  function errorJson(estado, error, mensaje, errores) {
+    return JSON.stringify({ fecha: ahoraLocal(), estado: estado, error: error, mensaje: mensaje, ruta: '/api/productos', errores: errores || {} }, null, 2);
+  }
+
+  // Convierte un valor JSON al tipo Java del campo, como haría Jackson. Devuelve { ok, valor, nota }
+  function convertir(campo, v) {
+    if (v === null || v === undefined) return { ok: true, valor: null };
+    if (campo === 'nombre' || campo === 'descripcion') {
+      if (typeof v === 'object') return { ok: false };
+      return { ok: true, valor: String(v), nota: typeof v === 'string' ? '' : ' (convertido a texto)' };
+    }
+    if (campo === 'precio') {
+      if (typeof v === 'number') return { ok: true, valor: String(v) };
+      if (typeof v === 'string' && /^\s*-?\d+(\.\d+)?\s*$/.test(v)) return { ok: true, valor: v.trim(), nota: ' (Jackson convierte el texto en número)' };
+      return { ok: false };
+    }
+    if (campo === 'stock') {
+      if (typeof v === 'number') {
+        if (!Number.isInteger(v)) return { ok: true, valor: Math.trunc(v), nota: ' (Jackson quita los decimales)' };
+        return { ok: true, valor: v };
+      }
+      if (typeof v === 'string' && /^\s*-?\d+\s*$/.test(v)) return { ok: true, valor: parseInt(v, 10), nota: ' (Jackson convierte el texto en número)' };
+      return { ok: false };
+    }
+  }
+
+  function cifras(texto) {
+    const t = texto.replace('-', '');
+    const [ent, dec] = t.split('.');
+    return { enteras: ent.replace(/^0+(?=\d)/, '').length, decimales: dec ? dec.length : 0 };
+  }
+
+  // Anotaciones de ProductoRequest, en el orden en que están declaradas
+  function validar(r) {
+    const nb = r.nombre, desc = r.descripcion, pr = r.precio, st = r.stock;
+    const nulo = '<small>null se da por válido: de eso se encarga @NotNull</small>';
+    return {
+      nombre: [
+        ['@NotBlank', nb !== null && nb.trim() !== '', 'El nombre es obligatorio'],
+        ['@Size(max = 100)', nb === null || nb.length <= 100, 'El nombre no puede tener más de 100 caracteres', nb === null ? nulo : '']
+      ],
+      descripcion: [
+        ['@Size(max = 500)', desc === null || desc.length <= 500, 'La descripción no puede tener más de 500 caracteres', desc === null ? '<small>opcional: null es válido</small>' : '']
+      ],
+      precio: [
+        ['@NotNull', pr !== null, 'El precio es obligatorio'],
+        ['@Positive', pr === null || parseFloat(pr) > 0, 'El precio tiene que ser mayor que 0', pr === null ? nulo : ''],
+        ['@Digits(integer = 8, fraction = 2)', pr === null || (cifras(pr).enteras <= 8 && cifras(pr).decimales <= 2), 'El precio admite como mucho 8 cifras enteras y 2 decimales', pr === null ? nulo : '']
+      ],
+      stock: [
+        ['@NotNull', st !== null, 'El stock es obligatorio'],
+        ['@PositiveOrZero', st === null || st >= 0, 'El stock no puede ser negativo', st === null ? nulo : '']
+      ]
+    };
+  }
+
+  function analizar() {
+    const lectura = $('lectura'), reglas = $('reglas');
+    lectura.innerHTML = ''; reglas.innerHTML = '';
+    let datos;
+    try { datos = JSON.parse($('json').value); } catch (e) { datos = undefined; }
+
+    if (datos === undefined || datos === null || typeof datos !== 'object' || Array.isArray(datos)) {
+      lectura.appendChild(fila('falta', '(cuerpo)', 'No es un objeto JSON válido: Jackson no puede leerlo.'));
+      reglas.innerHTML = '<p class="vacio" style="margin:0">No se llega a validar: falla antes, al leer el JSON.</p>';
+      responder(400, 'Bad Request', errorJson(400, 'Bad Request', 'El cuerpo de la petición no es un JSON válido o algún campo tiene un tipo incorrecto'),
+        'Spring lanza <code>HttpMessageNotReadableException</code> al leer el cuerpo. Ni la validación ni el servicio llegan a ejecutarse.');
+      return;
+    }
+
+    // 01 · lectura
+    const r = {};
+    let tipoMal = null;
+    Object.keys(datos).forEach(k => {
+      if (!CAMPOS.includes(k)) {
+        lectura.appendChild(fila('ignorado', '"' + k + '"', 'Ignorado: <code>ProductoRequest</code> no tiene este campo'));
+      }
+    });
+    CAMPOS.forEach(c => {
+      if (!(c in datos)) {
+        r[c] = null;
+        lectura.appendChild(fila('falta', c, 'No viene en el JSON: queda <code>null</code>'));
+        return;
+      }
+      const conv = convertir(c, datos[c]);
+      if (!conv.ok) {
+        tipoMal = tipoMal || c;
+        lectura.appendChild(fila('falta', '"' + c + '"', '<strong>No se puede convertir</strong> ' + JSON.stringify(datos[c]) + ' al tipo del campo'));
+        return;
+      }
+      r[c] = conv.valor;
+      lectura.appendChild(fila('', '"' + c + '"', '<code>' + c + '</code> = ' + (conv.valor === null ? 'null' : c === 'precio' ? conv.valor : JSON.stringify(conv.valor)) + (conv.nota || '')));
+    });
+
+    if (tipoMal) {
+      reglas.innerHTML = '<p class="vacio" style="margin:0">No se llega a validar: Jackson no ha podido crear el <code>ProductoRequest</code>.</p>';
+      responder(400, 'Bad Request', errorJson(400, 'Bad Request', 'El cuerpo de la petición no es un JSON válido o algún campo tiene un tipo incorrecto'),
+        'El JSON está bien escrito, pero <code>' + tipoMal + '</code> no tiene un valor del tipo correcto: también es <code>HttpMessageNotReadableException</code>.');
+      return;
+    }
+
+    // 02 · validación
+    const res = validar(r);
+    const errores = {};
+    Object.keys(res).forEach(campo => {
+      const bloque = document.createElement('div');
+      bloque.className = 'regla-campo';
+      const h = document.createElement('h5');
+      h.textContent = campo;
+      bloque.appendChild(h);
+      res[campo].forEach(([anot, ok, msg, extra]) => {
+        const d = document.createElement('div');
+        d.className = 'regla ' + (ok ? 'ok' : 'mal');
+        d.innerHTML = '<span class="m">' + (ok ? '✔' : '✘') + '</span><span><code>' + anot + '</code> ' + (ok ? (extra || '') : '<small>' + msg + '</small>') + '</span>';
+        bloque.appendChild(d);
+        if (!ok && !(campo in errores)) errores[campo] = msg;
+      });
+      reglas.appendChild(bloque);
+    });
+
+    if (Object.keys(errores).length) {
+      responder(400, 'Bad Request', errorJson(400, 'Bad Request', 'Hay campos con valores no válidos', errores),
+        '<code>@Valid</code> falla y Spring lanza <code>MethodArgumentNotValidException</code> <strong>sin entrar en el método</strong>. El manejador global se queda con un error por campo.');
+      return;
+    }
+
+    // 03 · pasa la validación: entra en el servicio
+    if (EXISTENTES.includes(r.nombre.trim().toLowerCase())) {
+      responder(409, 'Conflict', errorJson(409, 'Conflict', "Ya existe un producto con el nombre '" + r.nombre + "'"),
+        'El DTO es válido, así que se entra en <code>ProductoService.crear()</code>. Allí salta la <strong>regla de negocio</strong> del nombre único (lección 01): eso no lo puede comprobar el DTO.');
+      return;
+    }
+    const respuesta = { id: 9, nombre: r.nombre, descripcion: r.descripcion, precio: r.precio, stock: r.stock, disponible: r.stock > 0, fechaCreacion: ahoraLocal() };
+    responder(201, 'Created', JSON.stringify(respuesta, null, 2).replace(/"precio": "([\d.-]+)"/, '"precio": $1'),
+      'Todo correcto: el servicio crea el producto y devuelve un <code>ProductoResponse</code>. El <code>id</code> y la <code>fechaCreacion</code> los ha puesto el servidor, y <code>disponible</code> es un campo calculado.');
+  }
+
+  const presets = $('presets');
+  PRESETS.forEach(([t, obj], i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip-btn';
+    b.textContent = t;
+    b.setAttribute('aria-pressed', String(i === 0));
+    b.addEventListener('click', () => {
+      presets.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      escribir(obj);
+    });
+    presets.appendChild(b);
+  });
+  let espera;
+  $('json').addEventListener('input', () => {
+    presets.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', 'false'));
+    clearTimeout(espera);
+    espera = setTimeout(analizar, 250);
+  });
+  escribir(PRESETS[0][1]);
+})();
+
+/* ---------------- autoevaluación ---------------- */
+crearTest([
+  { q: '¿Por qué ProductoRequest no tiene el campo id?',
+    opts: ['Porque se le olvidó al programador', 'Porque el id lo decide la base de datos: si el cliente lo manda, se ignora', 'Porque los record no pueden tener un Long', 'Para que el JSON ocupe menos'], ok: 1,
+    why: 'Lo que el cliente no debe decidir no existe en el DTO de entrada. Jackson ignora los campos del JSON que el record no tiene.' },
+  { q: '¿Por qué ProductoResponse puede ser un record y Producto no?',
+    opts: ['Porque los record son más modernos', 'Porque JPA necesita un constructor vacío y setters, y un record es inmutable', 'Porque Producto tiene más campos', 'Sí puede: da igual'], ok: 1,
+    why: 'Un DTO se crea de una vez y no cambia. JPA tiene que poder crear la entidad vacía y rellenarla o modificarla.' },
+  { q: 'Un cliente envía {"nombre": "Ratón", "precio": 10}. ¿Qué recibe?',
+    opts: ['201 Created con stock 0', '400: falta stock, que tiene @NotNull; el servicio ni se llama', '500: falla PostgreSQL', '409: el nombre está repetido'], ok: 1,
+    why: 'stock queda null y @NotNull falla. La validación ocurre al entrar en el controlador, antes de llamar al servicio. (El nombre repetido lo comprobaría el servicio, pero no se llega.)' },
+  { q: '¿Dónde comprobarías que un email tiene formato válido? ¿Y que no está ya registrado?',
+    opts: ['Los dos en el DTO', 'Los dos en el servicio', 'El formato en el DTO con @Email; que no esté registrado, en el servicio', 'El formato en el servicio; el registro en el DTO'], ok: 2,
+    why: 'El formato se ve mirando solo el dato. Saber si ya existe obliga a consultar la base de datos: es una regla de negocio.' },
+  { q: 'El precio llega como null. ¿Qué anotaciones de precio fallan?',
+    opts: ['@NotNull, @Positive y @Digits', 'Solo @NotNull: las demás dan null por válido', 'Ninguna: null es un valor permitido', 'Solo @Positive'], ok: 1,
+    why: 'En Bean Validation casi todas las anotaciones consideran válido el null. Por eso, si un campo es obligatorio, hace falta @NotNull (o @NotBlank en textos).' },
+  { q: 'Quitas @Valid del método crear() del controlador. ¿Qué pasa al enviar un nombre vacío?',
+    opts: ['Un 400, igual que antes', 'La aplicación no arranca', 'Las anotaciones se ignoran y el dato inválido llega al servicio', 'Un 404'], ok: 2,
+    why: 'Las anotaciones del DTO no hacen nada por sí solas: @Valid es lo que pide que se comprueben. Sin él, no hay ningún aviso.' },
+  { q: '¿Cómo se lee el nombre de un ProductoRequest llamado request?',
+    opts: ['request.getNombre()', 'request.nombre()', 'request.nombre', 'request.get("nombre")'], ok: 1,
+    why: 'Los record generan un método con el mismo nombre que el campo, sin el prefijo get.' },
+  { q: 'Para un String obligatorio, ¿qué anotación es la buena?',
+    opts: ['@NotNull', '@NotEmpty', '@NotBlank', '@Size(min = 0)'], ok: 2,
+    why: '@NotNull deja pasar "" y "   ". @NotBlank rechaza null, vacío y solo espacios.' }
+], { quiz: document.getElementById('quiz'), score: document.getElementById('score'), leccion: 'dto' });
+
+iniciarLeccion('dto');
+</script>
+</body>
+</html>

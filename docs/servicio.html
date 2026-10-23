@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lección 01 · Capa de servicio · SASE Formación</title>
+<meta name="description" content="La capa de servicio en Spring Boot: reglas de negocio, excepciones con significado, @Transactional y consultas derivadas, con un simulador del método vender().">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/sase.css">
+<style>
+.idiomas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 22px; }
+.idiomas > * { min-width: 0; }
+@media (max-width: 760px) { .idiomas { grid-template-columns: 1fr; } }
+.idioma { border-top: 5px solid var(--c); }
+.idioma h3 { margin: 0 0 4px; color: color-mix(in srgb, var(--c) 68%, #1E2430); }
+.idioma .habla { font: 500 .7rem var(--mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.idioma .chips .chip { background: var(--t); color: color-mix(in srgb, var(--c) 68%, #1E2430); text-transform: none; letter-spacing: 0; }
+
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+.dos > * { min-width: 0; }
+@media (max-width: 860px) { .dos { grid-template-columns: 1fr; } }
+.card h3:first-child { margin-top: 0; }
+
+/* simulador de vender() */
+.sim { display: grid; grid-template-columns: minmax(260px, .9fr) 1.4fr; gap: 18px; margin-top: 22px; }
+.sim > * { min-width: 0; }
+@media (max-width: 900px) { .sim { grid-template-columns: 1fr; } }
+.sim-controles { display: grid; gap: 16px; align-content: start; align-self: start; }
+.sim-controles .selector { display: flex; flex-wrap: wrap; gap: 6px; }
+.sim-controles .selector .chip-btn { min-height: 36px; padding: 4px 12px; font-size: .85rem; }
+.cantidad { display: flex; gap: 6px; align-items: center; }
+.cantidad input { width: 90px; text-align: center; }
+.cantidad .chip-btn { min-height: 40px; width: 40px; justify-content: center; padding: 0; font: 500 1.1rem var(--mono); }
+.sim-derecha { display: grid; gap: 14px; align-content: start; }
+.sim-estado { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 600px) { .sim-estado { grid-template-columns: 1fr; } }
+.paso-texto { min-height: 4.5em; }
+.paso-texto .where { display: inline-block; font: 500 .7rem var(--mono); letter-spacing: 1.5px; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; margin-bottom: 8px; background: var(--tint-service); color: #2C667C; }
+.paso-texto p { margin: 4px 0; }
+table.mini { font-size: .85rem; }
+table.mini th { background: var(--white); color: var(--muted); border-bottom: 1px solid var(--line); padding: 6px 8px; }
+table.mini td { padding: 6px 8px; }
+table.mini td.n { font-family: var(--mono); text-align: right; }
+
+/* constructor de consultas derivadas */
+.constructor { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: end; }
+.constructor .check { grid-column: 1 / -1; }
+@media (max-width: 760px) { .constructor { grid-template-columns: 1fr; } }
+.nombre-metodo { font: 500 1.05rem var(--mono); overflow-wrap: anywhere; margin: 18px 0 6px; color: var(--ink); }
+.nombre-metodo .t { color: var(--muted); font-weight: 400; }
+.nombre-metodo .s-verbo { color: var(--blue); }
+.nombre-metodo .s-campo { color: var(--teal); }
+.nombre-metodo .s-cond { color: #A35F0D; }
+.nombre-metodo .s-and { color: var(--error); }
+.leyenda-trozos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.leyenda-trozos .chip { text-transform: none; letter-spacing: 0; font-size: .74rem; }
+.proyecto { margin-top: 10px; font-size: .92rem; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html" title="Índice de lecciones"><img src="sase_logo_rectangular.png" alt="SASE Formación"><span>Lección 01 · Servicio</span></a>
+    <nav class="nav" aria-label="Secciones">
+      <a href="#papel">El papel</a>
+      <a href="#reglas">Reglas</a>
+      <a href="#simulador">Simulador</a>
+      <a href="#excepciones">Excepciones</a>
+      <a href="#transacciones">@Transactional</a>
+      <a href="#consultas">Consultas</a>
+      <a href="#impl">¿Interfaz?</a>
+      <a href="#test">Autoevaluación</a>
+      <a href="#resumen">Resumen</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero-band">
+<div class="hero">
+  <div class="kicker">Lección 01 · Spring Boot · Proyecto CRUD de productos</div>
+  <h1>La capa de servicio</h1>
+  <p class="lead">Qué es la lógica de negocio y por qué va en el servicio, cómo se escribe una regla y qué hacer cuando no se cumple, para qué sirve <code>@Transactional</code> y cómo pedirle al repositorio consultas nuevas sin escribir SQL.</p>
+  <div class="callout key">
+    <strong>La idea en una frase</strong>
+    El controlador habla HTTP, el repositorio habla SQL, y el servicio habla el idioma del negocio: productos, ventas, stock.
+  </div>
+</div>
+</div>
+
+<main>
+
+<!-- ================= PAPEL ================= -->
+<section id="papel">
+  <div class="kicker">01 · El papel del servicio</div>
+  <h2>Tres capas, tres idiomas</h2>
+  <p class="lead">En la versión básica el servicio casi no hacía nada: pasaba las llamadas del controlador al repositorio. Es normal al empezar, pero un servicio de verdad es donde viven las <strong>reglas</strong>: lo que la tienda permite y lo que no.</p>
+  <div class="idiomas">
+    <div class="card idioma" style="--c: var(--c-controller); --t: var(--tint-controller)">
+      <span class="habla">Habla HTTP</span>
+      <h3>Controller</h3>
+      <p>Recibe la petición, llama al servicio y elige el código de respuesta.</p>
+      <div class="chips"><span class="chip">GET</span><span class="chip">/api/productos/7</span><span class="chip">201</span><span class="chip">JSON</span></div>
+    </div>
+    <div class="card idioma" style="--c: var(--c-service); --t: var(--tint-service)">
+      <span class="habla">Habla negocio</span>
+      <h3>Service</h3>
+      <p>Decide qué se puede hacer y qué no. Si una regla no se cumple, lanza una excepción con significado.</p>
+      <div class="chips"><span class="chip">vender</span><span class="chip">stock</span><span class="chip">nombre repetido</span></div>
+    </div>
+    <div class="card idioma" style="--c: var(--c-repository); --t: var(--tint-repository)">
+      <span class="habla">Habla SQL</span>
+      <h3>Repository</h3>
+      <p>Guarda y busca en la base de datos. No decide nada: hace lo que le piden.</p>
+      <div class="chips"><span class="chip">findById</span><span class="chip">save</span><span class="chip">select · update</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= REGLAS ================= -->
+<section id="reglas">
+  <div class="kicker">02 · Reglas de negocio</div>
+  <h2>Las reglas de este proyecto</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Regla</th><th>Dónde</th><th>Si no se cumple</th></tr></thead>
+      <tbody>
+        <tr><td>El <code>id</code> y la <code>fechaCreacion</code> los pone el servidor</td><td><code>crear()</code></td><td>No hay error: se ignora lo que mande el cliente</td></tr>
+        <tr><td>No puede haber dos productos con el mismo nombre (sin distinguir mayúsculas)</td><td><code>crear()</code> y <code>actualizar()</code></td><td><code>ProductoDuplicadoException</code></td></tr>
+        <tr><td>No se pueden vender más unidades de las que hay</td><td><code>vender()</code></td><td><code>StockInsuficienteException</code></td></tr>
+        <tr><td>No se puede leer, modificar ni borrar un producto que no existe</td><td>Casi todos</td><td><code>ProductoNoEncontradoException</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="dos">
+    <div>
+      <p><strong>¿Por qué no comprobar el stock en el controlador?</strong> Porque mañana puede haber otra forma de vender: una tarea programada, otro controlador, un mensaje de una cola… Si la regla está en el servicio, <strong>todas pasan por ella</strong>. Si está en un controlador, la otra vía se la salta.</p>
+      <p>Y un método nuevo como <code>vender()</code> no es un CRUD: un servicio no tiene por qué limitarse a crear, leer, actualizar y borrar. Refleja las operaciones del negocio.</p>
+    </div>
+    <div class="callout warn" style="margin:0">
+      <strong>Formato o negocio</strong>
+      Que el precio sea positivo o el nombre no esté vacío se comprueba <em>mirando solo la petición</em>: va en el DTO, con anotaciones (lección 02). Que el nombre no esté repetido o que haya stock <em>necesita consultar la base de datos</em>: va en el servicio.
+    </div>
+  </div>
+
+  <h3>¿Dónde va cada cosa? <span class="score" id="clasificaScore"></span></h3>
+  <p>Elige la capa de cada responsabilidad. El DTO lo verás a fondo en la lección 02: aquí basta con saber que es donde se comprueba el formato de los datos que llegan.</p>
+  <div class="clasifica" id="clasifica"></div>
+</section>
+
+<!-- ================= SIMULADOR ================= -->
+<section id="simulador">
+  <div class="kicker">03 · Simulador</div>
+  <h2><code>vender()</code>, línea a línea</h2>
+  <p class="lead">Elige un producto y una cantidad, y ejecuta el método paso a paso. Fíjate en la transacción: cuándo se abre, cuándo se confirma y cuándo se deshace.</p>
+
+  <div class="sim">
+    <div class="card sim-controles">
+      <div class="campo">
+        <span>Producto</span>
+        <div class="selector" id="simProducto" role="group" aria-label="Producto"></div>
+      </div>
+      <div class="campo">
+        <span>Cantidad</span>
+        <div class="cantidad">
+          <button class="chip-btn" type="button" id="menos" aria-label="Una menos">−</button>
+          <input type="number" id="simCantidad" value="4" min="1" max="99" aria-label="Cantidad">
+          <button class="chip-btn" type="button" id="mas" aria-label="Una más">+</button>
+        </div>
+      </div>
+      <div class="controls" style="margin:0">
+        <button class="btn cta" type="button" id="simSiguiente">Siguiente paso →</button>
+        <button class="btn" type="button" id="simTodo">Ejecutar todo</button>
+      </div>
+      <button class="btn" type="button" id="simRestaurar">Restaurar el stock</button>
+      <p class="vacio" style="margin:0">Prueba también a vender exactamente todo el stock: ¿qué pasa con <code>disponible</code>?</p>
+    </div>
+
+    <div class="sim-derecha">
+      <div class="panel paso-texto" id="simTexto" aria-live="polite"></div>
+      <div class="code" id="simCodigo"></div>
+      <div class="sim-estado">
+        <div class="panel">
+          <h4>Variables <span class="tx" id="simTx">sin transacción</span></h4>
+          <div class="vars" id="simVars"></div>
+        </div>
+        <div class="panel">
+          <h4>PostgreSQL <code>productos</code></h4>
+          <div id="simTabla"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h4>Respuesta</h4>
+        <div id="simRespuesta"><p class="vacio">Todavía no ha terminado el método.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= EXCEPCIONES ================= -->
+<section id="excepciones">
+  <div class="kicker">04 · Cuando una regla no se cumple</div>
+  <h2>Lanzar excepciones en vez de devolver <code>null</code> o <code>false</code></h2>
+  <p class="lead">Si <code>vender()</code> devolviera <code>false</code> cuando no hay stock, quien lo llama podría <strong>olvidarse de comprobarlo</strong>, y el error aparecería mucho más tarde y lejos. Una excepción no se puede ignorar sin querer.</p>
+  <div class="dos">
+    <div class="code" data-snippet="conFalse"></div>
+    <div class="code" data-snippet="conExcepcion"></div>
+  </div>
+  <p style="margin-top:18px">El servicio <strong>no sabe nada de HTTP</strong>: no devuelve un 409 ni un <code>ResponseEntity</code>. Lanza una excepción con significado, y en la lección 04 verás quién decide que eso es un 409. Las tres excepciones del proyecto heredan de <code>RuntimeException</code> (no comprobadas), así que no obligan a poner <code>throws</code> ni <code>try/catch</code> en cada método por el que pasan:</p>
+  <div class="code flotante" data-snippet="duplicada"></div>
+
+  <h3>El método privado <code>obtenerProducto()</code></h3>
+  <p>Varios métodos necesitan «búscame el producto o lanza un 404». En vez de repetirlo, hay un método privado. Los métodos públicos devuelven DTOs (lección 02); este, al ser privado, puede devolver la <strong>entidad</strong> para que <code>actualizar()</code> y <code>vender()</code> la modifiquen sin que salga del servicio.</p>
+  <div class="code flotante" data-snippet="obtener"></div>
+</section>
+
+<!-- ================= TRANSACCIONES ================= -->
+<section id="transacciones">
+  <div class="kicker">05 · @Transactional</div>
+  <h2>Todo o nada</h2>
+  <p class="lead">Cada método público lleva <code>@Transactional</code>: todo lo que hace en la base de datos va en una transacción. Si termina bien se confirman los cambios (<em>commit</em>); si lanza una excepción se deshacen (<em>rollback</em>). Lo has visto en el simulador.</p>
+  <div class="ruta" style="grid-template-columns: max-content minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,.9fr)" role="img" aria-label="Si el método termina bien se hace commit; si lanza una excepción, rollback">
+    <div class="ruta-fila">
+      <span class="etq">Termina bien</span>
+      <div class="paso" style="--c: var(--c-service); --t: var(--tint-service)">Se abre la transacción</div><span class="fl"></span>
+      <div class="paso" style="--c: var(--c-repository); --t: var(--tint-repository)">SELECT<small>obtenerProducto()</small></div><span class="fl"></span>
+      <div class="paso" style="--c: var(--c-repository); --t: var(--tint-repository)">UPDATE<small>save()</small></div><span class="fl vuelta"></span>
+      <div class="paso si">Commit<small>los cambios quedan guardados</small></div>
+    </div>
+    <div class="ruta-fila">
+      <span class="etq">Excepción</span>
+      <div class="paso" style="--c: var(--c-service); --t: var(--tint-service)">Se abre la transacción</div><span class="fl"></span>
+      <div class="paso" style="--c: var(--c-repository); --t: var(--tint-repository)">SELECT<small>obtenerProducto()</small></div><span class="fl"></span>
+      <div class="paso no">throw<small>StockInsuficienteException</small></div><span class="fl vuelta"></span>
+      <div class="paso no">Rollback<small>como si no hubiera pasado nada</small></div>
+    </div>
+  </div>
+  <ul>
+    <li>En <code>actualizar()</code> hay un <code>SELECT</code> (buscar) y un <code>UPDATE</code> (guardar). Con la transacción, nadie ve un estado a medias.</li>
+    <li>Las lecturas llevan <code>@Transactional(readOnly = true)</code>: avisa de que no se va a escribir, y la base de datos puede optimizar.</li>
+  </ul>
+  <div class="callout warn">
+    <strong>Detalle importante</strong>
+    Por defecto Spring solo hace <em>rollback</em> con excepciones <strong>no comprobadas</strong> (<code>RuntimeException</code> y sus hijas). Con una excepción comprobada (<code>extends Exception</code>) haría <em>commit</em> aunque falle. Otra razón para que nuestras excepciones de negocio hereden de <code>RuntimeException</code>.
+  </div>
+</section>
+
+<!-- ================= CONSULTAS ================= -->
+<section id="consultas">
+  <div class="kicker">06 · Consultas derivadas</div>
+  <h2>El repositorio aprende cosas nuevas sin escribir SQL</h2>
+  <p class="lead">Para la regla del nombre único hay que preguntar «¿existe un producto con este nombre?». Basta con <strong>declarar un método con un nombre que siga las reglas de Spring Data</strong>: lo lee por partes y genera la consulta al arrancar.</p>
+  <div class="code flotante" data-snippet="repositorio"></div>
+
+  <h3>Constrúyela tú</h3>
+  <div class="card">
+    <div class="constructor">
+      <label class="campo"><span>Qué quieres</span>
+        <select id="cVerbo">
+          <option value="existsBy">existsBy · ¿existe?</option>
+          <option value="findBy">findBy · búscalos</option>
+          <option value="countBy">countBy · cuéntalos</option>
+        </select>
+      </label>
+      <label class="campo"><span>Por qué campo</span>
+        <select id="cCampo">
+          <option value="Nombre">Nombre</option>
+          <option value="Precio">Precio</option>
+          <option value="Stock">Stock</option>
+        </select>
+      </label>
+      <label class="campo"><span>Condición</span>
+        <select id="cCond"></select>
+      </label>
+      <label class="check"><input type="checkbox" id="cIdNot"> Sin contar un id (<code>AndIdNot</code>)</label>
+    </div>
+    <div class="nombre-metodo" id="cMetodo"></div>
+    <div class="leyenda-trozos" id="cTrozos"></div>
+    <div class="code" id="cSql"></div>
+    <p class="proyecto" id="cProyecto"></p>
+  </div>
+  <p style="margin-top:18px"><strong>¿Por qué el proyecto necesita las dos?</strong> Al actualizar, el producto ya tiene su nombre guardado. Con la primera, al actualizar el «Teclado» sin cambiarle el nombre, encontraría… a sí mismo, y diría que está duplicado. Por eso se excluye su propio <code>id</code>.</p>
+  <div class="callout">
+    <strong>Errores de nombre, al arrancar</strong>
+    Si escribes mal un atributo (<code>existsByNonbre</code>), la aplicación <strong>no arranca</strong>: Spring Data comprueba los nombres al iniciar. Mejor eso que un error en producción.
+  </div>
+</section>
+
+<!-- ================= IMPL ================= -->
+<section id="impl">
+  <div class="kicker">07 · Para saber más</div>
+  <h2>¿Y lo de <code>ProductoService</code> + <code>ProductoServiceImpl</code>?</h2>
+  <p>En muchos cursos y proyectos verás el servicio dividido en una <strong>interfaz</strong> y una <strong>implementación</strong>. El controlador depende de la interfaz, y se podría cambiar la implementación sin tocarlo.</p>
+  <div class="dos">
+    <div class="code" data-snippet="interfaz"></div>
+    <div class="code" data-snippet="impl"></div>
+  </div>
+  <p style="margin-top:18px">Es útil cuando hay <strong>varias</strong> implementaciones de verdad (por ejemplo, <code>PagoConTarjeta</code> y <code>PagoConBizum</code>). Con una sola, es más código sin un beneficio claro, y Spring y Mockito funcionan igual de bien con clases. Aquí se ha dejado una sola clase para que se lea mejor; si en clase usáis el patrón con interfaz, es un cambio mecánico y no altera nada de esta lección.</p>
+</section>
+
+<!-- ================= PROBAR ================= -->
+<section id="probar">
+  <div class="kicker">08 · En el proyecto</div>
+  <h2>Cómo comprobarlo</h2>
+  <div class="grid cols-2">
+    <div class="card">
+      <h3 style="margin-top:0">Con peticiones</h3>
+      <p>En <a href="https://github.com/gsanox/crud-springboot/blob/main/docs/peticiones.http"><code>peticiones.http</code></a>, sección <em>Lección 1</em>: crea un producto y vuelve a crearlo con el nombre en mayúsculas (<strong>409</strong>). Vende 4 unidades (<strong>200</strong>, stock restado) y luego 100 (<strong>409</strong>).</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Con los tests</h3>
+      <p><code>ProductoServiceTest</code> prueba cada regla (<code>noSePuedeCrearUnNombreRepetidoAunqueCambienMayusculas</code>, <code>noSePuedeVenderMasDeLoQueHay</code>…) contra PostgreSQL:</p>
+      <p><code>./mvnw test -Dtest=ProductoServiceTest</code></p>
+    </div>
+  </div>
+
+  <h3>Errores típicos</h3>
+  <div class="grid cols-2">
+    <div class="card"><b class="dont">Poner reglas en el controlador.</b> El formato de los datos va en el DTO; las reglas del negocio, en el servicio.</div>
+    <div class="card"><b class="dont">Devolver null</b> cuando algo no existe, en vez de lanzar una excepción.</div>
+    <div class="card"><b class="dont">Llamar al repositorio desde el controlador</b> «porque es solo un <code>findAll</code>». Mañana necesita una regla y ya no hay un sitio único donde ponerla.</div>
+    <div class="card"><b class="dont">Olvidar @Transactional</b> en un método que hace varias escrituras: si falla la segunda, la primera se queda hecha.</div>
+  </div>
+</section>
+
+<!-- ================= TEST ================= -->
+<section id="test">
+  <div class="kicker">09 · Autoevaluación</div>
+  <h2>¿Lo has pillado? Comprueba</h2>
+  <p class="lead">Pulsa una respuesta. Si fallas, lee la explicación: es donde más se aprende. <span class="score" id="score"></span></p>
+  <div class="quiz" id="quiz"></div>
+</section>
+
+<!-- ================= RESUMEN ================= -->
+<section id="resumen" class="summary">
+  <div class="kicker">10 · Para repasar</div>
+  <h2>Si solo te quedas con 5 ideas</h2>
+  <div class="card">
+    <ol>
+      <li>El servicio es donde viven las <strong>reglas del negocio</strong>. No sabe nada de HTTP ni de SQL.</li>
+      <li>Si una regla no se cumple, el servicio <strong>lanza una excepción con significado</strong> en vez de devolver <code>null</code> o <code>false</code>.</li>
+      <li>Las excepciones de negocio heredan de <strong><code>RuntimeException</code></strong>: no ensucian los métodos con <code>throws</code> y provocan el <em>rollback</em>.</li>
+      <li><strong><code>@Transactional</code></strong> hace que cada método sea todo o nada.</li>
+      <li>Las <strong>consultas derivadas</strong> (<code>existsByNombreIgnoreCase</code>) se escriben solo con el nombre del método.</li>
+    </ol>
+  </div>
+</section>
+
+<nav class="lesson-nav" id="lessonNav" aria-label="Lecciones"></nav>
+
+</main>
+
+<footer>Lecciones del proyecto <code>crud</code> (Spring Boot 4 · PostgreSQL) · DAM · DAW<br><a href="https://saseformacion.es">sase<span>_</span> Formación</a> · saseformacion.es</footer>
+
+<script src="assets/lecciones.js"></script>
+<script>
+/* ---------------- código real del proyecto ---------------- */
+const SNIPPETS = {
+  conFalse: { file: 'Con boolean (NO es el código del proyecto)', hl: [1, 7], lines: [
+    'public boolean vender(Long id, int cantidad) {',
+    '    if (producto.getStock() < cantidad) return false;',
+    '    ...',
+    '    return true;',
+    '}',
+    '',
+    '// Quien llama puede olvidarse de mirar el resultado:',
+    'productoService.vender(7L, 100);   // ← no ha vendido nada, y nadie se entera'] },
+  conExcepcion: { file: 'service/ProductoService.java', hl: [3, 4, 5], lines: [
+    'public ProductoResponse vender(Long id, int cantidad) {',
+    '    Producto producto = obtenerProducto(id);',
+    '    // Regla de negocio: no se puede vender más de lo que hay',
+    '    if (producto.getStock() < cantidad) {',
+    '        throw new StockInsuficienteException(producto.getNombre(), producto.getStock(), cantidad);',
+    '    }',
+    '    ...'] },
+  duplicada: { file: 'exception/ProductoDuplicadoException.java', hl: [4], lines: [
+    '/**',
+    ' * Regla de negocio: no puede haber dos productos con el mismo nombre.',
+    ' * ManejadorGlobalExcepciones la convierte en un 409 Conflict.',
+    ' */',
+    'public class ProductoDuplicadoException extends RuntimeException {',
+    '',
+    '    public ProductoDuplicadoException(String nombre) {',
+    '        super("Ya existe un producto con el nombre \'" + nombre + "\'");',
+    '    }',
+    '}'] },
+  obtener: { file: 'service/ProductoService.java', hl: [2], lines: [
+    '// Método privado de apoyo: devuelve la ENTIDAD (para modificarla) o lanza la excepción.',
+    '// Es privado, así que la entidad nunca sale del servicio.',
+    'private Producto obtenerProducto(Long id) {',
+    '    return productoRepository.findById(id)',
+    '            .orElseThrow(() -> new ProductoNoEncontradoException(id));',
+    '}'] },
+  repositorio: { file: 'repository/ProductoRepository.java', hl: [6, 9], lines: [
+    '@Repository',
+    'public interface ProductoRepository extends JpaRepository<Producto, Long> {',
+    '',
+    '    // Consultas derivadas: Spring Data genera el SQL a partir del nombre del método',
+    '',
+    '    // select count(*) > 0 from productos where upper(nombre) = upper(?)',
+    '    boolean existsByNombreIgnoreCase(String nombre);',
+    '',
+    '    // Igual, pero sin contar el propio producto (para cuando se actualiza)',
+    '    boolean existsByNombreIgnoreCaseAndIdNot(String nombre, Long id);',
+    '}'] },
+  interfaz: { file: 'service/ProductoService.java (con interfaz)', hl: [0], lines: [
+    'public interface ProductoService {',
+    '    ProductoResponse buscarPorId(Long id);',
+    '    ProductoResponse vender(Long id, int cantidad);',
+    '    // ...',
+    '}'] },
+  impl: { file: 'service/ProductoServiceImpl.java', hl: [0, 1], lines: [
+    '@Service',
+    'public class ProductoServiceImpl implements ProductoService {',
+    '    // el código de verdad, igual que ahora',
+    '}'] }
+};
+document.querySelectorAll('[data-snippet]').forEach(el => {
+  const s = SNIPPETS[el.dataset.snippet];
+  renderCode(el, s.file, s.lines, s.hl);
+});
+
+/* ---------------- ¿dónde va cada cosa? ---------------- */
+crearClasifica(document.getElementById('clasifica'), ['Controller', 'DTO', 'Service', 'Repository'], [
+  { frase: 'Atender la URL /api/productos/{id}', ok: 'Controller', porque: 'Las URLs y los verbos HTTP son cosa del controlador (@GetMapping, @PostMapping…).' },
+  { frase: 'El nombre es obligatorio y tiene como mucho 100 caracteres', ok: 'DTO', porque: 'Es una comprobación de formato: basta con mirar la petición. Se hace con @NotBlank y @Size en el DTO.' },
+  { frase: 'No puede haber dos productos con el mismo nombre', ok: 'Service', porque: 'Necesita consultar la base de datos para saberlo: es una regla de negocio.' },
+  { frase: 'Responder 201 Created al crear', ok: 'Controller', porque: 'Los códigos HTTP los decide el controlador (@ResponseStatus) o el manejador de excepciones, nunca el servicio.' },
+  { frase: 'La consulta que comprueba si un nombre ya está en la tabla', ok: 'Repository', porque: 'La consulta en sí (existsByNombreIgnoreCase) es acceso a datos. Quien decide qué hacer con el resultado es el servicio.' },
+  { frase: 'No se puede vender más stock del que hay', ok: 'Service', porque: 'Depende del stock guardado en la base de datos: es una regla de negocio.' },
+  { frase: 'El precio tiene que ser mayor que 0', ok: 'DTO', porque: 'Se sabe mirando solo el dato que llega: @Positive en el DTO.' },
+  { frase: 'El id y la fecha de creación los pone el servidor', ok: 'Service', porque: 'crear() pone la fecha y deja el id a la base de datos. El DTO de entrada ni siquiera tiene esos campos.' }
+], document.getElementById('clasificaScore'));
+
+/* ---------------- simulador de vender() ---------------- */
+(function () {
+  const $ = id => document.getElementById(id);
+  const CODIGO = [
+    '@Transactional',
+    'public ProductoResponse vender(Long id, int cantidad) {',
+    '    Producto producto = obtenerProducto(id);',
+    '',
+    '    // Regla de negocio: no se puede vender más de lo que hay',
+    '    if (producto.getStock() < cantidad) {',
+    '        throw new StockInsuficienteException(producto.getNombre(), producto.getStock(), cantidad);',
+    '    }',
+    '',
+    '    producto.setStock(producto.getStock() - cantidad);',
+    '    return productoMapper.toResponse(productoRepository.save(producto));',
+    '}'];
+  const INICIAL = { 7: { id: 7, nombre: 'Teclado', precio: '49.99', stock: 10 }, 8: { id: 8, nombre: 'Ratón', precio: '19.90', stock: 3 } };
+  let tabla, idSel = 7, pasos = [], i = -1, vars = {};
+
+  function restaurar() {
+    tabla = JSON.parse(JSON.stringify(INICIAL));
+    reiniciarEjecucion();
+  }
+
+  // Calcula de antemano los pasos de esta ejecución, como haría el método de verdad
+  function preparar() {
+    const id = idSel;
+    const cantidad = Math.max(1, parseInt($('simCantidad').value, 10) || 1);
+    const p = tabla[id];
+    const L = [];
+    L.push({ hl: [0, 1], tx: 'abierta', vars: { id: id, cantidad: cantidad },
+      texto: '<p>Spring ve <code>@Transactional</code> y <strong>abre una transacción</strong> antes de entrar en el método. Llegan <code>id = ' + id + '</code> y <code>cantidad = ' + cantidad + '</code>.</p>' });
+    if (!p) {
+      L.push({ hl: [2], tx: 'abierta', vars: { id: id, cantidad: cantidad, producto: '(no existe)' },
+        texto: '<p><code>obtenerProducto(' + id + ')</code> hace un <code>SELECT</code> y no encuentra nada: lanza <code>ProductoNoEncontradoException</code>.</p>' });
+      L.push({ hl: [2], tx: 'rollback', fin: { estado: 404, cuerpo: '{\n  "estado": 404,\n  "mensaje": "No existe ningún producto con id ' + id + '"\n}' },
+        texto: '<p>La excepción sale del método sin que nadie la capture. Spring hace <strong>rollback</strong> y el manejador global la convierte en un <strong>404</strong> (lección 04).</p>' });
+      return L;
+    }
+    const prod = 'Producto(' + p.nombre + ', stock ' + p.stock + ')';
+    L.push({ hl: [2], tx: 'abierta', vars: { id: id, cantidad: cantidad, producto: prod },
+      texto: '<p><code>obtenerProducto(' + id + ')</code> hace un <code>SELECT</code> y devuelve la <strong>entidad</strong>: «' + p.nombre + '», con ' + p.stock + ' unidades.</p>' });
+    const falta = p.stock < cantidad;
+    L.push({ hl: [5], tx: 'abierta', vars: { id: id, cantidad: cantidad, producto: prod, 'stock < cantidad': p.stock + ' < ' + cantidad + ' → ' + falta },
+      texto: '<p>La regla de negocio: <code>' + p.stock + ' &lt; ' + cantidad + '</code> es <strong>' + falta + '</strong>. ' +
+        (falta ? 'No hay suficiente: se entra en el <code>if</code>.' : 'Hay suficiente: el <code>if</code> no se ejecuta.') + '</p>' });
+    if (falta) {
+      L.push({ hl: [6], tx: 'abierta', vars: { id: id, cantidad: cantidad, producto: prod },
+        texto: '<p><code>throw new StockInsuficienteException(...)</code>. El método se corta aquí: las líneas de abajo <strong>no se ejecutan</strong>.</p>' });
+      L.push({ hl: [6], tx: 'rollback', fin: { estado: 409, cuerpo: '{\n  "estado": 409,\n  "mensaje": "Stock insuficiente de \'' + p.nombre + '\': hay ' + p.stock + ' y se han pedido ' + cantidad + '"\n}' },
+        texto: '<p>Spring hace <strong>rollback</strong>: la tabla queda exactamente igual. El manejador global responde con un <strong>409 Conflict</strong>.</p>' });
+      return L;
+    }
+    const nuevo = p.stock - cantidad;
+    L.push({ hl: [9], tx: 'abierta', vars: { id: id, cantidad: cantidad, producto: 'Producto(' + p.nombre + ', stock ' + nuevo + ')' },
+      texto: '<p><code>setStock(' + p.stock + ' - ' + cantidad + ')</code>: el stock pasa a <strong>' + nuevo + '</strong>, de momento solo en el objeto en memoria. La tabla todavía no ha cambiado.</p>' });
+    L.push({ hl: [10], tx: 'abierta', vars: { id: id, cantidad: cantidad, producto: 'Producto(' + p.nombre + ', stock ' + nuevo + ')' }, guardar: nuevo,
+      texto: '<p><code>save()</code> lanza el <code>UPDATE</code>, y el mapper convierte la entidad en un <code>ProductoResponse</code> (lección 03).</p>' });
+    L.push({ hl: [11], tx: 'commit', fin: { estado: 200, cuerpo: '{\n  "id": ' + id + ',\n  "nombre": "' + p.nombre + '",\n  "precio": ' + p.precio + ',\n  "stock": ' + nuevo + ',\n  "disponible": ' + (nuevo > 0) + '\n}' },
+      texto: '<p>El método termina bien: Spring hace <strong>commit</strong> y el cambio queda guardado. ' + (nuevo === 0 ? 'Has vendido todo el stock: <code>disponible</code> pasa a <code>false</code>.' : '') + '</p>' });
+    return L;
+  }
+
+  function pintarTabla(destacar) {
+    const t = document.createElement('table');
+    t.className = 'mini';
+    t.innerHTML = '<thead><tr><th>id</th><th>nombre</th><th>stock</th></tr></thead>';
+    const tb = document.createElement('tbody');
+    Object.values(tabla).forEach(p => {
+      const tr = document.createElement('tr');
+      [p.id, p.nombre, p.stock].forEach((x, k) => {
+        const td = document.createElement('td');
+        td.textContent = x;
+        if (k !== 1) td.className = 'n';
+        tr.appendChild(td);
+      });
+      if (destacar === p.id) tr.classList.add('destello');
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    $('simTabla').innerHTML = '';
+    $('simTabla').appendChild(t);
+  }
+
+  function pintarVars(v) {
+    const box = $('simVars');
+    box.innerHTML = '';
+    const claves = Object.keys(v);
+    if (!claves.length) { box.innerHTML = '<p class="vacio" style="margin:0">El método aún no se ha llamado.</p>'; return; }
+    claves.forEach(k => {
+      const d = document.createElement('div');
+      const a = document.createElement('span'); a.textContent = k;
+      const b = document.createElement('b'); b.textContent = v[k];
+      d.append(a, b);
+      box.appendChild(d);
+    });
+  }
+
+  function pintarTx(estado) {
+    const tx = $('simTx');
+    tx.className = 'tx ' + (estado || '');
+    tx.textContent = { abierta: 'transacción abierta', commit: 'commit', rollback: 'rollback' }[estado] || 'sin transacción';
+  }
+
+  function reiniciarEjecucion() {
+    pasos = [];
+    i = -1;
+    renderCode($('simCodigo'), 'service/ProductoService.java', CODIGO, []);
+    $('simTexto').innerHTML = '<span class="where">Listo</span><p>Pulsa <strong>Siguiente paso</strong> para llamar a <code>vender(' + idSel + ', ' + $('simCantidad').value + ')</code>.</p>';
+    $('simRespuesta').innerHTML = '<p class="vacio">Todavía no ha terminado el método.</p>';
+    $('simSiguiente').disabled = false;
+    $('simTodo').disabled = false;
+    pintarVars({});
+    pintarTx(null);
+    pintarTabla(null);
+  }
+
+  function avanzar() {
+    if (i === -1) pasos = preparar();
+    if (i >= pasos.length - 1) return;
+    i++;
+    const p = pasos[i];
+    renderCode($('simCodigo'), 'service/ProductoService.java', CODIGO, p.hl);
+    $('simTexto').innerHTML = '<span class="where">Paso ' + (i + 1) + ' de ' + pasos.length + '</span>' + p.texto;
+    if (p.vars) pintarVars(p.vars);   // los pasos finales conservan las variables del anterior
+    pintarTx(p.tx);
+    if (p.guardar !== undefined) { tabla[idSel].stock = p.guardar; pintarTabla(idSel); }
+    if (p.fin) {
+      const caja = $('simRespuesta');
+      caja.innerHTML = '';
+      const chip = document.createElement('span');
+      chip.className = 'estado-http' + (p.fin.estado >= 400 ? ' err' : '');
+      chip.textContent = p.fin.estado + ' ' + { 200: 'OK', 404: 'Not Found', 409: 'Conflict' }[p.fin.estado];
+      const pre = document.createElement('pre');
+      pre.className = 'respuesta-http';
+      pre.style.marginTop = '10px';
+      pre.textContent = p.fin.cuerpo;
+      caja.append(chip, pre);
+      $('simSiguiente').disabled = true;
+      $('simTodo').disabled = true;
+    }
+  }
+
+  function pintarSelector() {
+    const sel = $('simProducto');
+    sel.innerHTML = '';
+    [[7, 'Teclado'], [8, 'Ratón'], [99, 'no existe']].forEach(([id, nombre]) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip-btn';
+      b.innerHTML = '<span class="verb">' + id + '</span> ' + nombre;
+      b.setAttribute('aria-pressed', String(id === idSel));
+      b.addEventListener('click', () => { idSel = id; pintarSelector(); reiniciarEjecucion(); });
+      sel.appendChild(b);
+    });
+  }
+
+  $('simSiguiente').addEventListener('click', () => {
+    if (i >= 0 && pasos[i] && pasos[i].fin) return;
+    avanzar();
+  });
+  $('simTodo').addEventListener('click', () => { if (i === -1) pasos = preparar(); while (i < pasos.length - 1) avanzar(); });
+  $('simRestaurar').addEventListener('click', restaurar);
+  $('simCantidad').addEventListener('input', reiniciarEjecucion);
+  $('menos').addEventListener('click', () => { $('simCantidad').value = Math.max(1, (parseInt($('simCantidad').value, 10) || 1) - 1); reiniciarEjecucion(); });
+  $('mas').addEventListener('click', () => { $('simCantidad').value = Math.min(99, (parseInt($('simCantidad').value, 10) || 0) + 1); reiniciarEjecucion(); });
+
+  pintarSelector();
+  restaurar();
+})();
+
+/* ---------------- constructor de consultas derivadas ---------------- */
+(function () {
+  const $ = id => document.getElementById(id);
+  const CONDICIONES = {
+    Nombre: [['', 'igual a'], ['IgnoreCase', 'igual, sin mayúsculas'], ['Containing', 'que contenga'], ['StartingWith', 'que empiece por']],
+    Precio: [['', 'igual a'], ['LessThan', 'menor que'], ['GreaterThan', 'mayor que'], ['Between', 'entre dos valores']],
+    Stock: [['', 'igual a'], ['LessThan', 'menor que'], ['GreaterThan', 'mayor que'], ['Between', 'entre dos valores']]
+  };
+  const TIPO = { Nombre: 'String', Precio: 'BigDecimal', Stock: 'Integer' };
+  const DEVUELVE = { existsBy: 'boolean', findBy: 'List<Producto>', countBy: 'long' };
+
+  function rellenarCondiciones() {
+    const sel = $('cCond');
+    const antes = sel.value;
+    sel.innerHTML = '';
+    CONDICIONES[$('cCampo').value].forEach(([v, t]) => {
+      const o = document.createElement('option');
+      o.value = v;
+      o.textContent = (v || '(nada)') + ' · ' + t;
+      sel.appendChild(o);
+    });
+    if ([...sel.options].some(o => o.value === antes)) sel.value = antes;
+  }
+
+  function trozo(clase, texto) { return '<span class="' + clase + '">' + texto + '</span>'; }
+
+  function construir() {
+    const verbo = $('cVerbo').value, campo = $('cCampo').value, cond = $('cCond').value, idNot = $('cIdNot').checked;
+    const param = campo.toLowerCase();
+    const tipo = TIPO[campo];
+    const params = cond === 'Between'
+      ? [tipo + ' min', tipo + ' max']
+      : [tipo + ' ' + param];
+    if (idNot) params.push('Long id');
+
+    $('cMetodo').innerHTML = '<span class="t">' + DEVUELVE[verbo].replace('<', '&lt;').replace('>', '&gt;') + ' </span>' +
+      trozo('s-verbo', verbo) + trozo('s-campo', campo) + (cond ? trozo('s-cond', cond) : '') + (idNot ? trozo('s-and', 'AndIdNot') : '') +
+      '<span class="t">(' + params.join(', ') + ');</span>';
+
+    $('cTrozos').innerHTML =
+      '<span class="chip azul">' + verbo + ' → ' + { existsBy: '¿existe alguno?', findBy: 'devuelve la lista', countBy: 'cuántos hay' }[verbo] + '</span>' +
+      '<span class="chip">' + campo + ' → atributo ' + param + '</span>' +
+      (cond ? '<span class="chip naranja">' + cond + '</span>' : '') +
+      (idNot ? '<span class="chip naranja">AndIdNot → and id &lt;&gt; ?</span>' : '');
+
+    const col = param;
+    const where = {
+      '': col + ' = ?',
+      IgnoreCase: 'upper(' + col + ') = upper(?)',
+      Containing: col + " like ?          -- '%valor%'",
+      StartingWith: col + " like ?        -- 'valor%'",
+      LessThan: col + ' < ?',
+      GreaterThan: col + ' > ?',
+      Between: col + ' between ? and ?'
+    }[cond];
+    const select = { existsBy: 'select 1 from productos', findBy: 'select * from productos', countBy: 'select count(*) from productos' }[verbo];
+    const lineas = [select, 'where ' + where];
+    if (idNot) lineas.push('  and id <> ?');
+    if (verbo === 'existsBy') lineas.push('limit 1');
+    renderCode($('cSql'), 'SQL aproximado que genera Spring Data', lineas, [1]);
+
+    const nombre = verbo + campo + cond + (idNot ? 'AndIdNot' : '');
+    $('cProyecto').innerHTML = nombre === 'existsByNombreIgnoreCase'
+      ? '<span class="chip">✔ En el proyecto</span> Es la que usa <code>crear()</code> para la regla del nombre único.'
+      : nombre === 'existsByNombreIgnoreCaseAndIdNot'
+        ? '<span class="chip">✔ En el proyecto</span> Es la que usa <code>actualizar()</code>: no cuenta el propio producto.'
+        : 'Prueba a construir las dos que usa el proyecto.';
+  }
+
+  ['cVerbo', 'cCampo', 'cCond', 'cIdNot'].forEach(id => $(id).addEventListener('change', () => {
+    if (id === 'cCampo') rellenarCondiciones();
+    construir();
+  }));
+  rellenarCondiciones();
+  $('cCond').value = 'IgnoreCase';
+  construir();
+})();
+
+/* ---------------- autoevaluación ---------------- */
+crearTest([
+  { q: '¿Por qué vender() lanza una excepción en vez de devolver false si no hay stock?',
+    opts: ['Porque es más rápido', 'Porque un false se puede ignorar sin querer; la excepción obliga a tratar el caso y provoca el rollback', 'Porque Spring no permite devolver boolean', 'Porque así el controlador puede usar try/catch'], ok: 1,
+    why: 'Un false que nadie comprueba hace que el error pase desapercibido. Una excepción explica qué ha pasado con su nombre y, además, deshace la transacción.' },
+  { q: 'Al actualizar el producto 5 sin cambiarle el nombre, ¿qué pasaría si el servicio usara existsByNombreIgnoreCase en vez de existsByNombreIgnoreCaseAndIdNot?',
+    opts: ['Nada, funcionaría igual', 'Encontraría al propio producto 5 y diría que está duplicado', 'Lanzaría un error de SQL', 'Actualizaría otro producto'], ok: 1,
+    why: 'El producto 5 ya tiene ese nombre en la tabla. Sin excluir su propio id, la consulta lo encuentra y la regla salta.' },
+  { q: 'ProductoDuplicadoException hereda de Exception en vez de RuntimeException. ¿Qué cambia?',
+    opts: ['Nada', 'Hay que declararla con throws o capturarla en cada método, y @Transactional ya no hace rollback automático', 'Solo cambia el mensaje', 'Spring la convierte siempre en un 500'], ok: 1,
+    why: 'Las excepciones comprobadas obligan a throws/try-catch, y por defecto Spring solo hace rollback con las no comprobadas.' },
+  { q: '¿Dónde pondrías la regla «no se puede borrar un producto que todavía tiene stock»?',
+    opts: ['En el controlador, con un if', 'En el DTO, con una anotación', 'En eliminar() del servicio, lanzando una excepción de negocio', 'En el repositorio'], ok: 2,
+    why: 'Depende del stock guardado en la base de datos: es una regla de negocio. Lo natural es una excepción nueva (por ejemplo ProductoConStockException) que el manejador global convierta en un 409.' },
+  { q: 'En el simulador, vendes 100 unidades de un producto con 10. ¿Cómo queda la tabla?',
+    opts: ['Con stock -90', 'Con stock 0', 'Exactamente igual: el método lanza la excepción antes de modificar nada y además hay rollback', 'Sin el producto'], ok: 2,
+    why: 'El if de la regla se comprueba antes de setStock. La excepción corta el método y la transacción se deshace.' },
+  { q: '¿Qué hace @Transactional(readOnly = true) en los métodos de lectura?',
+    opts: ['Impide que se pueda llamar al método dos veces', 'Avisa de que no se va a escribir, y la base de datos puede optimizar', 'Guarda el resultado en caché', 'Hace que el método sea más seguro frente a ataques'], ok: 1,
+    why: 'Es una pista para Hibernate y la base de datos: la transacción solo lee.' },
+  { q: 'Escribes en el repositorio boolean existsByNonbre(String nombre), con una errata. ¿Qué pasa?',
+    opts: ['Devuelve siempre false', 'La aplicación no arranca: Spring Data comprueba los nombres al iniciar', 'Falla la primera vez que se llama', 'Spring corrige la errata'], ok: 1,
+    why: 'Spring Data analiza los nombres de los métodos al arrancar. Si un trozo no corresponde a ningún atributo de la entidad, el arranque falla.' },
+  { q: '¿Cuándo tiene sentido separar ProductoService en interfaz + ProductoServiceImpl?',
+    opts: ['Siempre, es obligatorio en Spring', 'Cuando hay varias implementaciones de verdad', 'Nunca', 'Solo si se usa @Transactional'], ok: 1,
+    why: 'Con una sola implementación es más código sin un beneficio claro. Spring y Mockito funcionan igual de bien con clases.' }
+], { quiz: document.getElementById('quiz'), score: document.getElementById('score'), leccion: 'servicio' });
+
+iniciarLeccion('servicio');
+</script>
+</body>
+</html>

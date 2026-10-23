@@ -295,7 +295,7 @@ table.mini td.num-col { font-family: var(--mono); text-align: right; }
 
   <h3>Por qué se guardan DTOs y no entidades</h3>
   <p>La caché guarda <strong>el objeto tal cual</strong> en memoria, y todas las peticiones reciben <strong>el mismo objeto</strong>. Si fuera una entidad con <em>setters</em>, cualquier código que la modificara cambiaría «sin querer» lo que hay en la caché. Además, una entidad JPA está ligada a la sesión de Hibernate que la cargó.</p>
-  <p>Los DTOs son <code>record</code> (<strong>inmutables</strong>) y la lista viene de <code>.toList()</code> (<strong>no modificable</strong>), así que nadie puede estropear lo que hay en la caché. Otra ventaja de la <a href="https://github.com/gsanox/crud-springboot/blob/main/docs/lecciones/02-patron-dto.md">lección 02</a>.</p>
+  <p>Los DTOs son <code>record</code> (<strong>inmutables</strong>) y la lista viene de <code>.toList()</code> (<strong>no modificable</strong>), así que nadie puede estropear lo que hay en la caché. Otra ventaja de la <a href="dto.html">lección 02</a>.</p>
 </section>
 
 <!-- ================= TRAMPAS ================= -->
@@ -779,7 +779,7 @@ document.querySelectorAll('[data-snippet]').forEach(el => {
         explicar('Error · la caché no cambia', 'error', '<p>Ya hay un «Monitor»: <code>ProductoDuplicadoException</code>. Como el método no termina bien, <code>@CacheEvict</code> no vacía la lista.</p>');
       } else {
         SQL('insert into productos (descripcion,fecha_creacion,nombre,precio,stock) values (?,?,?,?,?) returning id');
-        const p = { id: siguienteId++, nombre: 'Monitor', descripcion: 'Monitor 27 pulgadas', precio: '199.00', stock: 4, fechaCreacion: new Date().toISOString().slice(0, 19) };
+        const p = { id: siguienteId++, nombre: 'Monitor', descripcion: 'Monitor 27 pulgadas', precio: '199.00', stock: 4, fechaCreacion: ahoraLocal() };
         bd.set(p.id, p);
         if (lista !== null) listaVaciadaPorCrear = true;
         const habiaLista = lista !== null;

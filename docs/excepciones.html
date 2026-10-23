@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lección 04 · Excepciones · SASE Formación</title>
+<meta name="description" content="Tratamiento de excepciones en Spring Boot con @RestControllerAdvice y @ExceptionHandler, con un explorador que sigue cada error desde donde nace hasta la respuesta.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/sase.css">
+<style>
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+.dos > * { min-width: 0; }
+@media (max-width: 860px) { .dos { grid-template-columns: 1fr; } }
+.tres { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 18px; }
+@media (max-width: 860px) { .tres { grid-template-columns: 1fr; } }
+.card h3:first-child { margin-top: 0; }
+.antes { border-top: 4px solid var(--error); }
+
+/* explorador */
+.casos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.casos .chip-btn { min-height: 38px; padding: 4px 14px; font-size: .88rem; }
+.casos .chip-btn .verb { min-width: 2.2em; }
+.escena { background: var(--white); border: 1px solid var(--line); border-radius: 20px; padding: 26px 18px 18px; box-shadow: var(--shadow); margin-top: 16px; }
+.pila { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px 12px; }
+.pila > * { min-width: 0; }
+.pnodo {
+  position: relative; background: var(--t); border: 2px solid transparent; border-radius: 16px;
+  padding: 16px 8px 12px; text-align: center; transition: opacity 160ms ease, border-color 160ms ease;
+}
+.pnodo .title { font-weight: 600; color: color-mix(in srgb, var(--c) 68%, #1E2430); }
+.pnodo .sub { font: 400 .62rem/1.4 var(--mono); color: var(--muted); }
+.pnodo .marca {
+  display: none; position: absolute; top: -11px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  font: 500 .6rem var(--mono); letter-spacing: 1px; text-transform: uppercase; padding: 2px 8px; border-radius: 999px;
+}
+.pnodo.origen { border-color: var(--error); }
+.pnodo.origen .marca { display: block; background: var(--error); color: var(--white); }
+.pnodo.cruza { border-color: var(--error); border-style: dashed; }
+.pnodo.cruza .marca { display: block; background: #FBEDEB; color: var(--error); }
+.pnodo.entrega { border-color: var(--blue); border-style: dashed; }
+.pnodo.entrega .marca { display: block; background: var(--tint-controller); color: var(--blue); }
+.pnodo.recibe { border-color: var(--teal); }
+.pnodo.recibe .marca { display: block; background: var(--teal); color: var(--white); }
+.pnodo.apagado { opacity: .35; }
+.manejador {
+  grid-column: 2 / -1; border: 2px dashed var(--line); border-radius: 16px; padding: 12px 16px;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap; transition: border-color 160ms ease, background 160ms ease, opacity 160ms ease;
+}
+.manejador .title { font: 500 .85rem var(--mono); color: var(--blue); }
+.manejador .metodo { font: 500 .8rem var(--mono); color: var(--teal); }
+.manejador.atrapa { border-style: solid; border-color: var(--blue); background: var(--tint-controller); }
+.manejador.apagado { opacity: .35; }
+@media (max-width: 860px) {
+  .pila { grid-template-columns: 1fr; gap: 16px; }
+  .manejador { grid-column: auto; }
+}
+.explicacion { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 18px; margin-top: 16px; align-items: start; }
+@media (max-width: 900px) { .explicacion { grid-template-columns: 1fr; } }
+.paso-texto .where { display: inline-block; font: 500 .7rem var(--mono); letter-spacing: 1.5px; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; margin-bottom: 8px; background: #FBEDEB; color: var(--error); }
+.paso-texto p { margin: 4px 0; }
+.peticion-actual { font: 500 .82rem var(--mono); color: var(--blue); margin: 0 0 22px; overflow-wrap: anywhere; }
+
+/* jerarquía de excepciones */
+.arbol-exc { font: 400 .84rem/1.9 var(--mono); }
+.arbol-exc div { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.arbol-exc .n1 { padding-left: 0; } .arbol-exc .n2 { padding-left: 22px; } .arbol-exc .n3 { padding-left: 44px; }
+.arbol-exc .n2::before, .arbol-exc .n3::before { content: "└"; color: var(--line); }
+.arbol-exc .clase { color: var(--ink); font-weight: 500; }
+.arbol-exc .va { font-size: .74rem; color: var(--teal); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html" title="Índice de lecciones"><img src="sase_logo_rectangular.png" alt="SASE Formación"><span>Lección 04 · Excepciones</span></a>
+    <nav class="nav" aria-label="Secciones">
+      <a href="#problema">El problema</a>
+      <a href="#idea">La idea</a>
+      <a href="#manejador">El manejador</a>
+      <a href="#explorador">Explorador</a>
+      <a href="#codigos">Qué código</a>
+      <a href="#detalles">Detalles</a>
+      <a href="#test">Autoevaluación</a>
+      <a href="#resumen">Resumen</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero-band">
+<div class="hero">
+  <div class="kicker">Lección 04 · Spring Boot · Proyecto CRUD de productos</div>
+  <h1>Tratamiento de excepciones</h1>
+  <p class="lead">Cómo viaja una excepción desde donde nace hasta convertirse en una respuesta HTTP, cómo centralizar todos los errores con <code>@RestControllerAdvice</code>, qué código corresponde a cada error y por qué el cliente nunca debe ver detalles internos.</p>
+  <div class="callout key">
+    <strong>La idea en una frase</strong>
+    El servicio lanza excepciones con significado y un único sitio decide qué respuesta HTTP le corresponde a cada una.
+  </div>
+</div>
+</div>
+
+<main>
+
+<!-- ================= PROBLEMA ================= -->
+<section id="problema">
+  <div class="kicker">01 · El problema</div>
+  <h2>Cada error, de su padre y de su madre</h2>
+  <p class="lead">En la versión básica, <code>ProductoNoEncontradoException</code> llevaba <code>@ResponseStatus(HttpStatus.NOT_FOUND)</code>. Funcionaba para ese caso, pero:</p>
+  <div class="tres">
+    <div class="card antes"><h3>Trazas de Java</h3><p>El JSON de error lo generaba Spring a su manera y, con DevTools, incluía <strong>la traza completa de Java</strong>.</p></div>
+    <div class="card antes"><h3>500 que no lo eran</h3><p>Un nombre vacío o un precio negativo acababa en un <strong>500</strong> (fallaba PostgreSQL), como si fuera culpa del servidor.</p></div>
+    <div class="card antes"><h3>Formatos distintos</h3><p>Un JSON mal escrito, un <code>/api/productos/abc</code>… cada uno salía con un formato diferente. Para quien programa el cliente, una pesadilla.</p></div>
+  </div>
+</section>
+
+<!-- ================= IDEA ================= -->
+<section id="idea">
+  <div class="kicker">02 · La idea</div>
+  <h2>El servicio lanza, un único sitio traduce</h2>
+  <div class="ruta" style="grid-template-columns: max-content minmax(0,1.1fr) auto minmax(0,1fr) auto minmax(0,1.2fr) auto minmax(0,1fr)" role="img" aria-label="El servicio lanza la excepción, el controlador no la captura, el manejador global la traduce y el cliente recibe un 404 con el JSON de error">
+    <div class="ruta-fila">
+      <span class="etq">Un 404</span>
+      <div class="paso no">ProductoService<small>throw new ProductoNoEncontradoException(99)</small></div><span class="fl" style="color: var(--error)"></span>
+      <div class="paso" style="--c: var(--c-controller); --t: var(--tint-controller)">ProductoController<small>no la captura: la deja pasar</small></div><span class="fl" style="color: var(--error)"></span>
+      <div class="paso" style="--c: var(--blue); --t: var(--tint-controller)">ManejadorGlobalExcepciones<small>@ExceptionHandler → 404 + JSON</small></div><span class="fl vuelta"></span>
+      <div class="paso si">Cliente<small>{"estado": 404, …}</small></div>
+    </div>
+  </div>
+  <ol>
+    <li>El <strong>servicio</strong> detecta el problema y lanza una excepción <strong>con significado</strong>. No sabe nada de HTTP.</li>
+    <li>La excepción <strong>sube</strong> por la pila de llamadas: nadie la captura con <code>try/catch</code>, así que atraviesa el controlador.</li>
+    <li>Antes de que llegue al servidor web, Spring busca un <strong><code>@ExceptionHandler</code></strong> que sepa tratarla.</li>
+    <li>El <em>handler</em> decide el <strong>código HTTP</strong> y construye el <strong>JSON de error</strong>, siempre con el mismo formato.</li>
+  </ol>
+  <p>Así <strong>ningún controlador tiene <code>try/catch</code></strong>, y añadir un error nuevo es añadir un método en un solo sitio.</p>
+</section>
+
+<!-- ================= MANEJADOR ================= -->
+<section id="manejador">
+  <div class="kicker">03 · El manejador global</div>
+  <h2><code>@RestControllerAdvice</code> y <code>@ExceptionHandler</code></h2>
+  <div class="dos">
+    <div class="code" data-snippet="manejadorCorto"></div>
+    <div>
+      <ul style="margin-top:0">
+        <li><strong><code>@RestControllerAdvice</code></strong>: «esta clase da consejos a todos los <code>@RestController</code>». Sus métodos se aplican a las excepciones que salgan de cualquier controlador.</li>
+        <li><strong><code>@ExceptionHandler(X.class)</code></strong>: este método trata las excepciones de tipo <code>X</code> y de sus clases hijas. Un mismo método puede atender varias.</li>
+        <li>Los parámetros los rellena Spring: la excepción y, si se pide, la petición (<code>HttpServletRequest</code>) para saber la ruta.</li>
+        <li><strong><code>ResponseEntity&lt;T&gt;</code></strong> permite elegir a la vez el <strong>código de estado</strong> y el <strong>cuerpo</strong>: <code>ResponseEntity.status(estado).body(cuerpo)</code>.</li>
+      </ul>
+    </div>
+  </div>
+  <h3>El formato común: <code>RespuestaError</code></h3>
+  <p>Todos los errores de la API tienen la misma forma. Es un DTO más (lección 02): un <code>record</code> pensado para lo que necesita el cliente.</p>
+  <div class="dos">
+    <div class="code" data-snippet="respuestaError"></div>
+    <div class="code" data-snippet="jsonError"></div>
+  </div>
+</section>
+
+<!-- ================= EXPLORADOR ================= -->
+<section id="explorador">
+  <div class="kicker">04 · Explorador</div>
+  <h2>Sigue un error desde donde nace hasta la respuesta</h2>
+  <p class="lead">Elige un error y recórrelo en cuatro pasos: dónde nace, por dónde sube, qué <code>@ExceptionHandler</code> lo atrapa y qué recibe el cliente. Todos los casos dan la misma respuesta que la API real.</p>
+
+  <div class="casos" id="casos" role="group" aria-label="Error"></div>
+
+  <div class="escena">
+    <p class="peticion-actual" id="peticionActual"></p>
+    <div class="pila" id="pila">
+      <div class="pnodo" data-n="cliente" style="--c: var(--c-cliente); --t: var(--tint-cliente)"><span class="marca"></span><div class="title">Cliente</div><div class="sub">Postman</div></div>
+      <div class="pnodo" data-n="mvc" style="--c: var(--c-model); --t: var(--tint-model)"><span class="marca"></span><div class="title">Spring MVC</div><div class="sub">rutas, Jackson, @Valid</div></div>
+      <div class="pnodo" data-n="controller" style="--c: var(--c-controller); --t: var(--tint-controller)"><span class="marca"></span><div class="title">Controller</div><div class="sub">ProductoController</div></div>
+      <div class="pnodo" data-n="service" style="--c: var(--c-service); --t: var(--tint-service)"><span class="marca"></span><div class="title">Service</div><div class="sub">ProductoService</div></div>
+      <div class="pnodo" data-n="repository" style="--c: var(--c-repository); --t: var(--tint-repository)"><span class="marca"></span><div class="title">Repository</div><div class="sub">y PostgreSQL</div></div>
+      <div class="manejador" id="manejadorNodo"><span class="title">ManejadorGlobalExcepciones</span><span class="metodo" id="manejadorMetodo"></span></div>
+    </div>
+    <div class="controls" style="margin-bottom:0">
+      <button class="btn" type="button" id="anterior">← Anterior</button>
+      <button class="btn cta" type="button" id="siguiente">Siguiente →</button>
+      <span class="step-count" id="cuenta"></span>
+    </div>
+  </div>
+
+  <div class="explicacion">
+    <div class="panel paso-texto" id="texto" aria-live="polite"></div>
+    <div class="code" id="codigo"></div>
+  </div>
+</section>
+
+<!-- ================= CÓDIGOS ================= -->
+<section id="codigos">
+  <div class="kicker">05 · Chuleta</div>
+  <h2>Qué error devuelve cada cosa</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Situación</th><th>Excepción</th><th>La lanza</th><th>Código</th></tr></thead>
+      <tbody>
+        <tr><td>El producto no existe</td><td><code>ProductoNoEncontradoException</code></td><td>nuestro servicio</td><td><b>404</b> Not Found</td></tr>
+        <tr><td>Nombre repetido</td><td><code>ProductoDuplicadoException</code></td><td>nuestro servicio</td><td><b>409</b> Conflict</td></tr>
+        <tr><td>No hay stock suficiente</td><td><code>StockInsuficienteException</code></td><td>nuestro servicio</td><td><b>409</b> Conflict</td></tr>
+        <tr><td>Un campo no cumple <code>@NotBlank</code>, <code>@Positive</code>…</td><td><code>MethodArgumentNotValidException</code></td><td>Spring, por <code>@Valid</code></td><td><b>400</b> Bad Request</td></tr>
+        <tr><td>JSON mal escrito o un campo con tipo incorrecto (<code>"precio": "caro"</code>)</td><td><code>HttpMessageNotReadableException</code></td><td>Spring</td><td><b>400</b> Bad Request</td></tr>
+        <tr><td><code>/api/productos/abc</code> (el id no es un número)</td><td><code>MethodArgumentTypeMismatchException</code></td><td>Spring</td><td><b>400</b> Bad Request</td></tr>
+        <tr><td>URL que no existe · verbo no permitido</td><td><code>NoResourceFoundException</code> · <code>HttpRequestMethodNotSupportedException</code></td><td>Spring</td><td><b>404</b> · <b>405</b></td></tr>
+        <tr><td>Cualquier otra cosa (por ejemplo, la base de datos caída)</td><td><code>Exception</code></td><td>quien sea</td><td><b>500</b> Internal Server Error</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout key">
+    <strong>¿Cómo se elige el código?</strong>
+    <b>4xx</b>: el cliente ha pedido algo incorrecto y puede corregirlo (datos mal, recurso que no existe, conflicto con el estado actual). <b>5xx</b>: ha fallado el servidor y el cliente no puede hacer nada. Un nombre repetido es <b>409</b> y no 400 porque la petición está bien formada: el problema es que choca con un dato que ya existe.
+  </div>
+</section>
+
+<!-- ================= DETALLES ================= -->
+<section id="detalles">
+  <div class="kicker">06 · Detalles importantes</div>
+  <h2>Gana el más específico</h2>
+  <p>Una <code>ProductoNoEncontradoException</code> también es una <code>RuntimeException</code> y una <code>Exception</code>, así que podrían tratarla dos <em>handlers</em>. Spring elige el que tiene el tipo <strong>más cercano</strong> en la jerarquía. <code>Exception.class</code> solo recoge lo que nadie más ha tratado.</p>
+  <div class="card arbol-exc">
+    <div class="n1"><span class="clase">Exception</span><span class="va">→ manejarErrorInesperado (500, o el código de Spring)</span></div>
+    <div class="n2"><span class="clase">RuntimeException</span><span class="va">(ningún handler propio: cae en Exception)</span></div>
+    <div class="n3"><span class="clase">ProductoNoEncontradoException</span><span class="va">→ manejarNoEncontrado (404)</span></div>
+    <div class="n3"><span class="clase">ProductoDuplicadoException</span><span class="va">→ manejarConflicto (409)</span></div>
+    <div class="n3"><span class="clase">StockInsuficienteException</span><span class="va">→ manejarConflicto (409)</span></div>
+  </div>
+
+  <h3>Al cliente, un mensaje genérico; al log, todo</h3>
+  <p>Una traza o un mensaje de la base de datos puede revelar nombres de tablas, versiones de librerías o rutas del servidor: información útil para un atacante. Por eso el 500 dice solo «Ha ocurrido un error inesperado», y el programador lo ve todo en el log con <code>log.error(..., ex)</code>. El <code>if</code> con <code>ErrorResponse</code> existe porque las excepciones propias de Spring (URL inexistente, verbo no permitido…) ya saben su código; sin él, la red de seguridad las convertiría todas en un 500.</p>
+
+  <h3>Excepciones comprobadas y no comprobadas</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th></th><th>Comprobadas (checked)</th><th>No comprobadas (unchecked)</th></tr></thead>
+      <tbody>
+        <tr><td>Heredan de</td><td><code>Exception</code></td><td><code>RuntimeException</code></td></tr>
+        <tr><td>¿Obligan a <code>throws</code> o <code>try/catch</code>?</td><td>Sí</td><td>No</td></tr>
+        <tr><td><code>@Transactional</code> hace rollback</td><td>No (por defecto)</td><td>Sí</td></tr>
+        <tr><td>Ejemplos</td><td><code>IOException</code>, <code>SQLException</code></td><td><code>NullPointerException</code>, <code>IllegalArgumentException</code>, <strong>las nuestras</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Las nuestras son no comprobadas para que puedan <strong>subir libremente</strong> desde el servicio hasta el manejador global sin ensuciar cada método con <code>throws</code>.</p>
+
+  <div class="dos">
+    <div class="card">
+      <h3>¿Entonces nunca <code>try/catch</code>?</h3>
+      <p>Sí, cuando <strong>puedes hacer algo útil</strong> con el error en ese punto: reintentar, usar un valor por defecto o traducir una excepción técnica a una de negocio. Lo que no hay que hacer es capturar una excepción solo para devolver un código HTTP desde el controlador.</p>
+      <div class="code" data-snippet="tryCatch"></div>
+    </div>
+    <div class="card">
+      <h3>Para saber más: <code>ProblemDetail</code></h3>
+      <p>Existe un estándar para el formato de los errores HTTP (RFC 9457, <em>Problem Details</em>), y Spring lo trae hecho con la clase <code>ProblemDetail</code>: campos como <code>type</code>, <code>title</code>, <code>status</code>, <code>detail</code> e <code>instance</code>.</p>
+      <p>Aquí se usa <code>RespuestaError</code> porque se entiende mejor al aprender, pero en proyectos profesionales verás <code>ProblemDetail</code> a menudo. La idea es la misma: <strong>un único formato para todos los errores</strong>.</p>
+    </div>
+  </div>
+
+  <h3>Cómo comprobarlo</h3>
+  <p>En <a href="https://github.com/gsanox/crud-springboot/blob/main/docs/peticiones.http"><code>peticiones.http</code></a>, sección <em>Lección 4</em>, hay una petición para cada fila de la chuleta. <code>ProductoControllerTest</code> cubre todos los casos sin base de datos: <code>@WebMvcTest</code> carga el controlador <strong>y los <code>@RestControllerAdvice</code></strong>, y al servicio simulado se le dice qué excepción lanzar con <code>when(...).thenThrow(...)</code>. <code>./mvnw test -Dtest=ProductoControllerTest</code></p>
+
+  <h3>Errores típicos</h3>
+  <div class="grid cols-2">
+    <div class="card"><b class="dont">try/catch en cada método del controlador</b> devolviendo un <code>ResponseEntity</code> de error. Es lo que el manejador global evita.</div>
+    <div class="card"><b class="dont">Capturar y no hacer nada</b> (<code>catch (Exception e) {}</code>). El error desaparece y nadie sabe por qué los datos están mal.</div>
+    <div class="card"><b class="dont">Devolver 500 para errores del cliente</b> (datos inválidos, recurso inexistente). El 500 es solo para fallos del servidor.</div>
+    <div class="card"><b class="dont">Devolver ex.getMessage() de un error inesperado.</b> Puede contener SQL o detalles internos.</div>
+    <div class="card"><b class="dont">Olvidar @RestControllerAdvice</b>, o poner la clase fuera del paquete <code>com.saseformacion.crud</code>: los <code>@ExceptionHandler</code> no se aplican.</div>
+  </div>
+</section>
+
+<!-- ================= TEST ================= -->
+<section id="test">
+  <div class="kicker">07 · Autoevaluación</div>
+  <h2>¿Lo has pillado? Comprueba</h2>
+  <p class="lead">Pulsa una respuesta. Si fallas, lee la explicación: es donde más se aprende. <span class="score" id="score"></span></p>
+  <div class="quiz" id="quiz"></div>
+</section>
+
+<!-- ================= RESUMEN ================= -->
+<section id="resumen" class="summary">
+  <div class="kicker">08 · Para repasar</div>
+  <h2>Si solo te quedas con 5 ideas</h2>
+  <div class="card">
+    <ol>
+      <li>El servicio <strong>lanza</strong> excepciones con significado; no sabe nada de HTTP.</li>
+      <li>Un <strong><code>@RestControllerAdvice</code></strong> con métodos <strong><code>@ExceptionHandler</code></strong> traduce cada excepción a un código y un JSON, en un solo sitio.</li>
+      <li>Todos los errores salen con el <strong>mismo formato</strong> (<code>RespuestaError</code>).</li>
+      <li><strong>4xx</strong> si el cliente puede corregirlo; <strong>5xx</strong> si ha fallado el servidor, con un mensaje genérico y el detalle en el log.</li>
+      <li>Si varios <em>handlers</em> encajan, gana el <strong>más específico</strong>; <code>Exception.class</code> es la red de seguridad.</li>
+    </ol>
+  </div>
+</section>
+
+<nav class="lesson-nav" id="lessonNav" aria-label="Lecciones"></nav>
+
+</main>
+
+<footer>Lecciones del proyecto <code>crud</code> (Spring Boot 4 · PostgreSQL) · DAM · DAW<br><a href="https://saseformacion.es">sase<span>_</span> Formación</a> · saseformacion.es</footer>
+
+<script src="assets/lecciones.js"></script>
+<script>
+/* ---------------- código real del proyecto ---------------- */
+const MANEJADOR = [
+  '@RestControllerAdvice',
+  'public class ManejadorGlobalExcepciones {',
+  '',
+  '    @ExceptionHandler(ProductoNoEncontradoException.class)',
+  '    public ResponseEntity<RespuestaError> manejarNoEncontrado(...) {',
+  '        return crearRespuesta(HttpStatus.NOT_FOUND, ex.getMessage(), request, Map.of());',
+  '    }',
+  '',
+  '    @ExceptionHandler({ ProductoDuplicadoException.class, StockInsuficienteException.class })',
+  '    public ResponseEntity<RespuestaError> manejarConflicto(...) {',
+  '        return crearRespuesta(HttpStatus.CONFLICT, ex.getMessage(), request, Map.of());',
+  '    }',
+  '',
+  '    @ExceptionHandler(MethodArgumentNotValidException.class)',
+  '    public ResponseEntity<RespuestaError> manejarValidacion(...) {',
+  '        // un error por campo: errores.putIfAbsent(campo, mensaje)',
+  '        return crearRespuesta(HttpStatus.BAD_REQUEST, "Hay campos con valores no válidos", request, errores);',
+  '    }',
+  '',
+  '    @ExceptionHandler(HttpMessageNotReadableException.class)',
+  '    public ResponseEntity<RespuestaError> manejarJsonIncorrecto(...) { /* 400 */ }',
+  '',
+  '    @ExceptionHandler(MethodArgumentTypeMismatchException.class)',
+  '    public ResponseEntity<RespuestaError> manejarTipoIncorrecto(...) { /* 400 */ }',
+  '',
+  '    // Red de seguridad: cualquier otra excepción',
+  '    @ExceptionHandler(Exception.class)',
+  '    public ResponseEntity<RespuestaError> manejarErrorInesperado(Exception ex, HttpServletRequest request) {',
+  '        if (ex instanceof ErrorResponse errorDeSpring) {',
+  '            // 404, 405...: se respeta el código que ya trae',
+  '            return crearRespuesta(estado, ex.getMessage(), request, Map.of());',
+  '        }',
+  '        log.error("Error inesperado en {} {}", request.getMethod(), request.getRequestURI(), ex);',
+  '        return crearRespuesta(HttpStatus.INTERNAL_SERVER_ERROR, "Ha ocurrido un error inesperado", request, Map.of());',
+  '    }',
+  '}'];
+
+const SNIPPETS = {
+  manejadorCorto: { file: 'exception/ManejadorGlobalExcepciones.java (resumido)', hl: [0, 3, 8], lines: MANEJADOR.slice(0, 12).concat(['    // ... uno por cada tipo de error', '}']) },
+  respuestaError: { file: 'dto/RespuestaError.java', hl: [6], lines: [
+    'public record RespuestaError(',
+    '        LocalDateTime fecha,',
+    '        int estado,',
+    '        String error,',
+    '        String mensaje,',
+    '        String ruta,',
+    '        Map<String, String> errores) {   // solo en los errores de validación',
+    '}'] },
+  jsonError: { file: 'Respuesta de un error (de la API real)', hl: [2, 4], lines: [
+    '{',
+    '  "fecha": "2026-10-23T20:01:37.001951",',
+    '  "estado": 409,',
+    '  "error": "Conflict",',
+    '  "mensaje": "Stock insuficiente de \'Teclado\': hay 6 y se han pedido 100",',
+    '  "ruta": "/api/productos/23/ventas",',
+    '  "errores": {}',
+    '}'] },
+  tryCatch: { file: 'Ejemplo (NO es del proyecto)', hl: [2, 3], lines: [
+    'try {',
+    '    pasarelaDePago.cobrar(importe);',
+    '} catch (TimeoutException e) {',
+    '    throw new PagoNoDisponibleException("La pasarela de pago no responde", e);',
+    '}'] }
+};
+document.querySelectorAll('[data-snippet]').forEach(el => {
+  const s = SNIPPETS[el.dataset.snippet];
+  renderCode(el, s.file, s.lines, s.hl);
+});
+
+/* ---------------- explorador ---------------- */
+(function () {
+  const $ = id => document.getElementById(id);
+  const ORDEN = ['cliente', 'mvc', 'controller', 'service', 'repository'];
+  const error = (estado, nombre, mensaje, ruta, errores) => JSON.stringify({ estado: estado, error: nombre, mensaje: mensaje, ruta: ruta, errores: errores || {} }, null, 2);
+
+  const CASOS = [
+    { id: '404', etiqueta: 'No existe', estado: 404, peticion: 'GET /api/productos/99', origen: 'service', excepcion: 'ProductoNoEncontradoException', metodo: 'manejarNoEncontrado()',
+      codigoOrigen: { file: 'service/ProductoService.java', hl: [2], lines: ['private Producto obtenerProducto(Long id) {', '    return productoRepository.findById(id)', '            .orElseThrow(() -> new ProductoNoEncontradoException(id));', '}'] },
+      nace: '<p><code>obtenerProducto(99)</code> no encuentra nada y lanza <code>ProductoNoEncontradoException</code>. Para la base de datos, «0 filas» no es un error: quien decide que lo es, es el <strong>servicio</strong>.</p>',
+      hl: [3, 4, 5], atrapa: '<p>Hay un <em>handler</em> exactamente para este tipo: <code>manejarNoEncontrado</code>, que responde con un <strong>404</strong>.</p>',
+      respuesta: error(404, 'Not Found', 'No existe ningún producto con id 99', '/api/productos/99') },
+    { id: '409a', etiqueta: 'Nombre repetido', estado: 409, peticion: 'POST /api/productos  {"nombre": "Teclado", ...}', origen: 'service', excepcion: 'ProductoDuplicadoException', metodo: 'manejarConflicto()',
+      codigoOrigen: { file: 'service/ProductoService.java', hl: [3], lines: ['public ProductoResponse crear(ProductoRequest request) {', '    // Regla de negocio: no puede haber dos productos con el mismo nombre', '    if (productoRepository.existsByNombreIgnoreCase(request.nombre())) {', '        throw new ProductoDuplicadoException(request.nombre());', '    }', '    ...'] },
+      nace: '<p>El DTO es válido, así que se entra en <code>crear()</code>. La regla del nombre único consulta la tabla, encuentra el «Teclado» y lanza <code>ProductoDuplicadoException</code>.</p>',
+      hl: [8, 9, 10], atrapa: '<p><code>manejarConflicto</code> atiende <strong>dos</strong> tipos de excepción a la vez: duplicado y stock insuficiente. Las dos son un <strong>409</strong>: la petición está bien, pero choca con los datos que ya hay.</p>',
+      respuesta: error(409, 'Conflict', "Ya existe un producto con el nombre 'Teclado'", '/api/productos') },
+    { id: '409b', etiqueta: 'Sin stock', estado: 409, peticion: 'POST /api/productos/7/ventas  {"cantidad": 100}', origen: 'service', excepcion: 'StockInsuficienteException', metodo: 'manejarConflicto()',
+      codigoOrigen: { file: 'service/ProductoService.java', hl: [4], lines: ['public ProductoResponse vender(Long id, int cantidad) {', '    Producto producto = obtenerProducto(id);', '    // Regla de negocio: no se puede vender más de lo que hay', '    if (producto.getStock() < cantidad) {', '        throw new StockInsuficienteException(producto.getNombre(), producto.getStock(), cantidad);', '    }', '    ...'] },
+      nace: '<p>Hay 6 unidades y se piden 100: la regla de <code>vender()</code> lanza <code>StockInsuficienteException</code>. Además, <code>@Transactional</code> hace <strong>rollback</strong> (lección 01).</p>',
+      hl: [8, 9, 10], atrapa: '<p>El mismo <code>manejarConflicto</code> que el nombre repetido: <strong>409</strong>, con el mensaje que puso el servicio al crear la excepción.</p>',
+      respuesta: error(409, 'Conflict', "Stock insuficiente de 'Teclado': hay 6 y se han pedido 100", '/api/productos/7/ventas') },
+    { id: '400a', etiqueta: 'Datos no válidos', estado: 400, peticion: 'POST /api/productos  {"nombre": "", "precio": -5, "stock": 1}', origen: 'mvc', excepcion: 'MethodArgumentNotValidException', metodo: 'manejarValidacion()',
+      codigoOrigen: { file: 'controller/ProductoController.java', hl: [2], lines: ['@PostMapping', '@ResponseStatus(HttpStatus.CREATED)', 'public ProductoResponse crear(@Valid @RequestBody ProductoRequest request) {', '    return productoService.crear(request);', '}'] },
+      nace: '<p>Spring comprueba <code>@Valid</code> <strong>antes de entrar</strong> en el método del controlador. El nombre está vacío y el precio es negativo: lanza <code>MethodArgumentNotValidException</code>. El controlador y el servicio ni se enteran.</p>',
+      hl: [13, 14, 15, 16], atrapa: '<p><code>manejarValidacion</code> recorre los errores de cada campo y los pone en el mapa <code>errores</code>: <strong>400</strong> con un mensaje por campo.</p>',
+      respuesta: error(400, 'Bad Request', 'Hay campos con valores no válidos', '/api/productos', { nombre: 'El nombre es obligatorio', precio: 'El precio tiene que ser mayor que 0' }) },
+    { id: '400b', etiqueta: 'JSON roto', estado: 400, peticion: 'POST /api/productos  { "nombre": "Ratón"', origen: 'mvc', excepcion: 'HttpMessageNotReadableException', metodo: 'manejarJsonIncorrecto()',
+      codigoOrigen: { file: 'controller/ProductoController.java', hl: [2], lines: ['@PostMapping', '@ResponseStatus(HttpStatus.CREATED)', 'public ProductoResponse crear(@Valid @RequestBody ProductoRequest request) {', '    return productoService.crear(request);', '}'] },
+      nace: '<p>Para rellenar el <code>@RequestBody</code>, Jackson tiene que leer el JSON… y está sin cerrar. Spring lanza <code>HttpMessageNotReadableException</code> antes incluso de validar.</p>',
+      hl: [19, 20], atrapa: '<p><code>manejarJsonIncorrecto</code> responde con un <strong>400</strong> y un mensaje genérico: el texto de la excepción original incluye detalles internos de Jackson que el cliente no necesita.</p>',
+      respuesta: error(400, 'Bad Request', 'El cuerpo de la petición no es un JSON válido o algún campo tiene un tipo incorrecto', '/api/productos') },
+    { id: '400c', etiqueta: 'Id no numérico', estado: 400, peticion: 'GET /api/productos/abc', origen: 'mvc', excepcion: 'MethodArgumentTypeMismatchException', metodo: 'manejarTipoIncorrecto()',
+      codigoOrigen: { file: 'controller/ProductoController.java', hl: [1], lines: ['@GetMapping("/{id}")', 'public ProductoResponse buscarPorId(@PathVariable Long id) {', '    return productoService.buscarPorId(id);', '}'] },
+      nace: '<p><code>@PathVariable Long id</code> necesita convertir <code>"abc"</code> en un <code>Long</code>, y no puede. Spring lanza <code>MethodArgumentTypeMismatchException</code> antes de llamar al método.</p>',
+      hl: [22, 23], atrapa: '<p><code>manejarTipoIncorrecto</code> construye un mensaje con el valor y el nombre del parámetro: <strong>400</strong>.</p>',
+      respuesta: error(400, 'Bad Request', "El valor 'abc' no es válido para el parámetro 'id'", '/api/productos/abc') },
+    { id: '405', etiqueta: 'Verbo no permitido', estado: 405, peticion: 'DELETE /api/productos', origen: 'mvc', excepcion: 'HttpRequestMethodNotSupportedException', metodo: 'manejarErrorInesperado() · if ErrorResponse',
+      codigoOrigen: { file: 'controller/ProductoController.java (rutas)', hl: [5], lines: ['@GetMapping                 // GET    /api/productos', '@GetMapping("/{id}")        // GET    /api/productos/{id}', '@PostMapping                // POST   /api/productos', '@PutMapping("/{id}")        // PUT    /api/productos/{id}', '@PostMapping("/{id}/ventas") // POST   /api/productos/{id}/ventas', '@DeleteMapping("/{id}")     // DELETE solo con id: no hay DELETE /api/productos'] },
+      nace: '<p>La URL existe, pero ningún método atiende <code>DELETE</code> en <code>/api/productos</code> (solo en <code>/{id}</code>). Spring lanza <code>HttpRequestMethodNotSupportedException</code>.</p>',
+      hl: [26, 27, 28, 29, 30], atrapa: '<p>No hay un <em>handler</em> propio, así que cae en la red de seguridad, <code>Exception.class</code>. Pero esta excepción es de Spring y ya «sabe» que es un <strong>405</strong> (implementa <code>ErrorResponse</code>): el <code>if</code> respeta ese código en vez de convertirla en un 500.</p>',
+      respuesta: error(405, 'Method Not Allowed', "Request method 'DELETE' is not supported", '/api/productos') },
+    { id: '500', etiqueta: 'BD caída', estado: 500, peticion: 'GET /api/productos/1  (con PostgreSQL parado)', origen: 'service', excepcion: 'CannotCreateTransactionException', metodo: 'manejarErrorInesperado() · log.error',
+      codigoOrigen: { file: 'Log de la aplicación (real)', hl: [0, 2], lines: ['ERROR c.s.c.e.ManejadorGlobalExcepciones : Error inesperado en GET /api/productos/1', '', 'org.springframework.transaction.CannotCreateTransactionException:', '    Could not open JPA EntityManager for transaction', '    ... (la traza completa, solo en el log)'] },
+      nace: '<p>Antes de entrar en <code>buscarPorId()</code>, <code>@Transactional</code> intenta abrir una transacción… y PostgreSQL no responde. Spring lanza <code>CannotCreateTransactionException</code>. Nadie la esperaba: es un fallo del <strong>servidor</strong>.</p>',
+      hl: [26, 27, 32, 33], atrapa: '<p>Cae en <code>Exception.class</code>. No es una excepción de Spring MVC con código propio, así que se <strong>guarda entera en el log</strong> (es lo que ves en el código de al lado) y al cliente se le da un mensaje <strong>genérico</strong>: nada de SQL ni de nombres internos.</p>',
+      respuesta: error(500, 'Internal Server Error', 'Ha ocurrido un error inesperado', '/api/productos/1') }
+  ];
+
+  let caso = CASOS[0], paso = 0;
+  const nodos = {};
+  document.querySelectorAll('.pnodo').forEach(n => nodos[n.dataset.n] = n);
+
+  function marcar(n, clase, texto) {
+    nodos[n].className = 'pnodo ' + clase;
+    nodos[n].querySelector('.marca').textContent = texto || '';
+  }
+
+  function pintar() {
+    $('peticionActual').textContent = caso.peticion;
+    const iOrigen = ORDEN.indexOf(caso.origen);
+    ORDEN.forEach((n, k) => {
+      if (paso === 0) {
+        marcar(n, k === iOrigen ? 'origen' : (k > iOrigen ? 'apagado' : ''), k === iOrigen ? 'nace aquí' : '');
+      } else if (paso === 1) {
+        if (k === iOrigen) marcar(n, 'origen', 'nace aquí');
+        else if (k > 1 && k < iOrigen) marcar(n, 'cruza', 'no la captura');
+        else if (k === 1) marcar(n, 'entrega', 'la recoge');
+        else marcar(n, k > iOrigen ? 'apagado' : '', '');
+      } else if (paso === 2) {
+        marcar(n, k === 1 ? 'entrega' : 'apagado', k === 1 ? 'la entrega' : '');
+      } else {
+        marcar(n, k === 0 ? 'recibe' : 'apagado', k === 0 ? caso.estado : '');
+      }
+    });
+    const m = $('manejadorNodo');
+    m.className = 'manejador' + (paso === 2 ? ' atrapa' : paso === 3 ? '' : ' apagado');
+    $('manejadorMetodo').textContent = paso >= 2 ? '→ ' + caso.metodo : '';
+
+    const t = $('texto');
+    const titulos = ['01 · Dónde nace', '02 · Sube por las capas', '03 · Quién la atrapa', '04 · Qué recibe el cliente'];
+    let html = '<span class="where">' + titulos[paso] + '</span>';
+    if (paso === 0) {
+      html += caso.nace + '<p><code>' + caso.excepcion + '</code></p>';
+      renderCode($('codigo'), caso.codigoOrigen.file, caso.codigoOrigen.lines, caso.codigoOrigen.hl);
+    } else if (paso === 1) {
+      const cruzadas = ORDEN.slice(2, iOrigen).map(n => nodos[n].querySelector('.title').textContent);
+      html += cruzadas.length
+        ? '<p>La excepción sube por la pila de llamadas. ' + cruzadas.reverse().join(' y ') + ' no tiene' + (cruzadas.length > 1 ? 'n' : '') + ' <code>try/catch</code>: la deja' + (cruzadas.length > 1 ? 'n' : '') + ' pasar. Ninguna capa tiene que saber qué código HTTP le corresponde.</p>'
+        : '<p>Ha nacido en Spring MVC, <strong>antes de llegar al controlador</strong>: ni el controlador ni el servicio se han ejecutado. Spring la recoge directamente.</p>';
+      renderCode($('codigo'), caso.codigoOrigen.file, caso.codigoOrigen.lines, caso.codigoOrigen.hl);
+    } else if (paso === 2) {
+      html += caso.atrapa;
+      renderCode($('codigo'), 'exception/ManejadorGlobalExcepciones.java (resumido)', MANEJADOR, caso.hl);
+    } else {
+      html += '<p><span class="estado-http err">' + caso.estado + '</span> Siempre con el mismo formato, <code>RespuestaError</code>, sea cual sea el error.</p>';
+      renderCode($('codigo'), 'Respuesta HTTP ' + caso.estado, ('HTTP/1.1 ' + caso.estado + '\nContent-Type: application/json\n\n' + caso.respuesta).split('\n'), [0, 3, 4]);
+    }
+    t.innerHTML = html;
+    $('cuenta').textContent = (paso + 1) + ' / 4';
+    $('anterior').disabled = paso === 0;
+    $('siguiente').disabled = paso === 3;
+  }
+
+  const lista = $('casos');
+  CASOS.forEach(c => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip-btn';
+    b.innerHTML = '<span class="verb">' + c.estado + '</span> ' + c.etiqueta;
+    b.setAttribute('aria-pressed', String(c === caso));
+    b.addEventListener('click', () => {
+      caso = c; paso = 0;
+      lista.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      pintar();
+    });
+    lista.appendChild(b);
+  });
+  $('anterior').addEventListener('click', () => { paso = Math.max(0, paso - 1); pintar(); });
+  $('siguiente').addEventListener('click', () => { paso = Math.min(3, paso + 1); pintar(); });
+  pintar();
+})();
+
+/* ---------------- autoevaluación ---------------- */
+crearTest([
+  { q: 'GET /api/productos/99 y el 99 no existe. ¿Quién lanza la excepción y quién decide que es un 404?',
+    opts: ['El repositorio la lanza y el controlador decide', 'El servicio la lanza y ManejadorGlobalExcepciones decide el 404', 'PostgreSQL la lanza y Spring decide', 'El controlador hace las dos cosas'], ok: 1,
+    why: 'obtenerProducto() lanza ProductoNoEncontradoException; nadie la captura, y manejarNoEncontrado la convierte en un 404 con RespuestaError.' },
+  { q: 'Quitas el método manejarNoEncontrado. ¿Qué recibe el cliente al pedir un producto que no existe?',
+    opts: ['Un 404 igualmente', 'Un 500 «Ha ocurrido un error inesperado», y un error en el log', 'Un 200 vacío', 'Un 400'], ok: 1,
+    why: 'La excepción caería en la red de seguridad, Exception.class. Como no es una excepción de Spring con código propio, sale un 500.' },
+  { q: '¿Por qué el nombre duplicado es un 409 y el nombre vacío un 400?',
+    opts: ['Por convenio, da igual', 'El vacío es un dato con mala forma (400); el duplicado es una petición correcta que choca con datos que ya existen (409)', 'Porque el 409 es más grave', 'Porque uno lo lanza Spring y otro nosotros'], ok: 1,
+    why: 'El 400 se detecta mirando solo la petición. El 409 depende del estado actual del servidor.' },
+  { q: 'Con un nombre vacío en el POST, ¿se ejecuta algo del controlador o del servicio?',
+    opts: ['Sí, los dos', 'Solo el controlador', 'Ninguno: @Valid falla antes de entrar en el método', 'Solo el servicio'], ok: 2,
+    why: 'Spring valida el @RequestBody antes de llamar al método del controlador. La excepción nace en Spring MVC.' },
+  { q: 'DELETE /api/productos (sin id) devuelve 405 y no 500. ¿Por qué?',
+    opts: ['Porque hay un @ExceptionHandler para 405', 'Porque la excepción de Spring implementa ErrorResponse y el manejador respeta su código', 'Porque el controlador devuelve 405', 'Porque Tomcat lo decide sin pasar por Spring'], ok: 1,
+    why: 'Cae en manejarErrorInesperado, pero el if con ErrorResponse mantiene el código que ya trae la excepción de Spring.' },
+  { q: 'La base de datos se cae. ¿Qué debe ver el cliente?',
+    opts: ['La traza completa, para depurar', 'El mensaje de la excepción con el SQL', 'Un 500 con un mensaje genérico; el detalle va al log', 'Un 404'], ok: 2,
+    why: 'Los detalles internos pueden ayudar a un atacante. El programador lo ve todo en el log con log.error(..., ex).' },
+  { q: 'Una ProductoNoEncontradoException encaja con @ExceptionHandler(ProductoNoEncontradoException.class) y con @ExceptionHandler(Exception.class). ¿Cuál se usa?',
+    opts: ['El primero que aparece en el fichero', 'El más específico: el de ProductoNoEncontradoException', 'Los dos', 'El de Exception, porque es más general'], ok: 1,
+    why: 'Spring elige el tipo más cercano en la jerarquía. Exception.class solo recoge lo que nadie más trata.' },
+  { q: 'Quieres añadir la regla «no se puede borrar un producto con stock» con un 409. ¿Qué cambias?',
+    opts: ['El controlador, con un try/catch', 'Una excepción nueva que lanza el servicio, y añadirla al @ExceptionHandler de los 409', 'Solo el repositorio', 'application.properties'], ok: 1,
+    why: 'El servicio lanza la excepción con significado y el manejador global decide el código. El controlador no cambia.' }
+], { quiz: document.getElementById('quiz'), score: document.getElementById('score'), leccion: 'excepciones' });
+
+iniciarLeccion('excepciones');
+</script>
+</body>
+</html>

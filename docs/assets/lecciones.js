@@ -4,29 +4,24 @@
 
 const REPO = 'https://github.com/gsanox/crud-springboot';
 
-/* Itinerario: el índice y la navegación ← → salen de esta lista.
-   md: versión en texto mientras la lección interactiva no está hecha. */
+/* Itinerario: el índice y la navegación ← → salen de esta lista. */
 const LECCIONES = [
-  { id: 'mvc', num: '00', titulo: 'MVC explicado paso a paso', url: 'mvc.html', disponible: true,
+  { id: 'mvc', num: '00', titulo: 'MVC explicado paso a paso', url: 'mvc.html',
     problema: 'Qué hace cada capa y cómo viaja una petición desde Postman hasta PostgreSQL y vuelta.',
     chips: ['Controller', 'Service', 'Repository', 'JPA'] },
-  { id: 'servicio', num: '01', titulo: 'Capa de servicio', url: 'servicio.html', disponible: false,
-    md: REPO + '/blob/main/docs/lecciones/01-capa-servicio.md',
+  { id: 'servicio', num: '01', titulo: 'Capa de servicio', url: 'servicio.html',
     problema: '¿Dónde van las reglas del negocio? Nombre único, ventas con control de stock y transacciones.',
     chips: ['Reglas de negocio', '@Transactional', 'Consultas derivadas'] },
-  { id: 'dto', num: '02', titulo: 'Patrón DTO', url: 'dto.html', disponible: false,
-    md: REPO + '/blob/main/docs/lecciones/02-patron-dto.md',
+  { id: 'dto', num: '02', titulo: 'Patrón DTO', url: 'dto.html',
     problema: 'La API exponía la entidad tal cual y no validaba nada. Un objeto para lo que entra y otro para lo que sale.',
     chips: ['record', '@Valid', 'Validación'] },
-  { id: 'mappers', num: '03', titulo: 'Mappers', url: 'mappers.html', disponible: false,
-    md: REPO + '/blob/main/docs/lecciones/03-mappers.md',
+  { id: 'mappers', num: '03', titulo: 'Mappers', url: 'mappers.html',
     problema: 'Convertir entidad ↔ DTO en un único sitio, y por qué actualizar no es lo mismo que crear.',
     chips: ['ProductoMapper', 'toEntity', 'updateEntity'] },
-  { id: 'excepciones', num: '04', titulo: 'Tratamiento de excepciones', url: 'excepciones.html', disponible: false,
-    md: REPO + '/blob/main/docs/lecciones/04-excepciones.md',
+  { id: 'excepciones', num: '04', titulo: 'Tratamiento de excepciones', url: 'excepciones.html',
     problema: 'Cada error salía con un formato distinto, o como un 500. Un manejador global y un JSON de error común.',
     chips: ['@RestControllerAdvice', '@ExceptionHandler', '400 · 404 · 409'] },
-  { id: 'cache', num: '05', titulo: 'Caché', url: 'cache.html', disponible: true,
+  { id: 'cache', num: '05', titulo: 'Caché', url: 'cache.html',
     problema: 'Leer lo mismo una y otra vez de la base de datos, y el problema de verdad: mantener los datos al día.',
     chips: ['@Cacheable', '@CachePut', '@CacheEvict'] }
 ];
@@ -140,14 +135,54 @@ function iniciarLeccion(id) {
   }
 
   if (anterior) {
-    enlace('anterior', '← Lección ' + anterior.num, anterior.titulo, anterior.disponible ? anterior.url : anterior.md);
+    enlace('anterior', '← Lección ' + anterior.num, anterior.titulo, anterior.url);
   } else {
     enlace('anterior', '← Índice', 'Todas las lecciones', 'index.html');
   }
   if (siguiente) {
-    enlace('siguiente', 'Lección ' + siguiente.num + (siguiente.disponible ? ' →' : ' · en texto →'), siguiente.titulo,
-      siguiente.disponible ? siguiente.url : siguiente.md);
+    enlace('siguiente', 'Lección ' + siguiente.num + ' →', siguiente.titulo, siguiente.url);
   } else {
     enlace('siguiente', 'Índice →', 'Todas las lecciones', 'index.html');
   }
+}
+
+/* Juego "¿dónde va cada cosa?": cada frase se asigna a una de las opciones. */
+function crearClasifica(contenedor, opciones, items, marcador) {
+  let respondidas = 0, aciertos = 0;
+  items.forEach(item => {
+    const fila = document.createElement('div');
+    fila.className = 'item';
+    const frase = document.createElement('div');
+    frase.className = 'frase';
+    frase.textContent = item.frase;
+    const grupo = document.createElement('div');
+    grupo.className = 'opciones';
+    const porque = document.createElement('div');
+    porque.className = 'porque';
+    const botones = opciones.map(op => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = op;
+      b.addEventListener('click', () => {
+        botones.forEach(x => x.disabled = true);
+        botones[opciones.indexOf(item.ok)].classList.add('right');
+        const bien = op === item.ok;
+        if (!bien) b.classList.add('wrong');
+        respondidas++; if (bien) aciertos++;
+        porque.innerHTML = (bien ? '<b style="color:var(--ok)">✔</b> ' : '<b style="color:var(--err)">✘ Va en ' + item.ok + '.</b> ') + item.porque;
+        porque.classList.add('show');
+        if (marcador) marcador.textContent = aciertos + ' de ' + respondidas + (respondidas === items.length ? ' · ¡terminado!' : '');
+      });
+      grupo.appendChild(b);
+      return b;
+    });
+    fila.append(frase, grupo, porque);
+    contenedor.appendChild(fila);
+  });
+}
+
+/* Fecha y hora locales en el formato de LocalDateTime (2026-10-23T20:01:36), como las devuelve la API */
+function ahoraLocal() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
 }

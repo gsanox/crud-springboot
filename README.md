@@ -5,10 +5,10 @@ Una API REST sencilla de productos para explicar **MVC** y la arquitectura en ca
 **Lecciones interactivas**: [Spring Boot por capas](https://gsanox.github.io/crud-springboot/), con el itinerario completo. Cada lección usa el código del proyecto, tiene algo que tocar (animaciones, simuladores) y termina con un test.
 
 0. [MVC explicado paso a paso](https://gsanox.github.io/crud-springboot/mvc.html): el viaje de una petición por las capas.
-1. [Capa de servicio](docs/lecciones/01-capa-servicio.md): reglas de negocio, `@Transactional` y consultas derivadas.
-2. [Patrón DTO](docs/lecciones/02-patron-dto.md): `record` de entrada y de salida, y validación con `@Valid`.
-3. [Mappers](docs/lecciones/03-mappers.md): conversión entidad ↔ DTO en un solo sitio.
-4. [Tratamiento de excepciones](docs/lecciones/04-excepciones.md): `@RestControllerAdvice` y un formato común para los errores.
+1. [Capa de servicio](https://gsanox.github.io/crud-springboot/servicio.html): reglas de negocio, `@Transactional` y consultas derivadas, con un simulador de `vender()`.
+2. [Patrón DTO](https://gsanox.github.io/crud-springboot/dto.html): `record` de entrada y de salida, y validación con `@Valid`, con un validador en vivo.
+3. [Mappers](https://gsanox.github.io/crud-springboot/mappers.html): conversión entidad ↔ DTO en un solo sitio, y por qué actualizar no es crear.
+4. [Tratamiento de excepciones](https://gsanox.github.io/crud-springboot/excepciones.html): `@RestControllerAdvice` y un formato común para los errores, siguiendo cada error de principio a fin.
 5. [Caché](https://gsanox.github.io/crud-springboot/cache.html): `@Cacheable`, `@CachePut` y `@CacheEvict`, con un laboratorio que simula la API.
 
 ## Qué lleva

@@ -183,14 +183,14 @@
 (function () {
   const progreso = Progreso.leer();
   const lista = document.getElementById('itinerarioLista');
-  // La siguiente lección recomendada: la primera disponible que aún no se ha visto
-  const siguiente = LECCIONES.find(l => l.disponible && !(progreso[l.id] && progreso[l.id].visto));
+  // La siguiente lección recomendada: la primera que aún no se ha visto
+  const siguiente = LECCIONES.find(l => !(progreso[l.id] && progreso[l.id].visto));
 
   LECCIONES.forEach(l => {
     const p = progreso[l.id] || {};
     const card = document.createElement('a');
-    card.className = 'leccion-card' + (l === siguiente ? ' oscura' : '') + (l.disponible ? '' : ' pendiente');
-    card.href = l.disponible ? l.url : l.md;
+    card.className = 'leccion-card' + (l === siguiente ? ' oscura' : '');
+    card.href = l.url;
 
     const num = document.createElement('span');
     num.className = 'num';
@@ -215,9 +215,7 @@
     pie.className = 'pie';
     const estado = document.createElement('span');
     estado.className = 'estado';
-    if (!l.disponible) {
-      estado.textContent = 'Interactiva en preparación';
-    } else if (p.test) {
+    if (p.test) {
       estado.textContent = 'Test: ' + p.test.aciertos + ' de ' + p.test.total;
       estado.classList.add('hecho');
     } else if (p.visto) {
@@ -228,19 +226,18 @@
     }
     const ir = document.createElement('span');
     ir.className = 'ir';
-    ir.textContent = l.disponible ? (p.visto ? 'Repasar →' : 'Empezar →') : 'Leer en texto →';
+    ir.textContent = p.visto ? 'Repasar →' : 'Empezar →';
     pie.append(estado, ir);
 
     card.append(num, h, desc, chips, pie);
     lista.appendChild(card);
   });
 
-  const disponibles = LECCIONES.filter(l => l.disponible);
-  const vistas = disponibles.filter(l => progreso[l.id] && progreso[l.id].visto).length;
+  const vistas = LECCIONES.filter(l => progreso[l.id] && progreso[l.id].visto).length;
   const tests = LECCIONES.filter(l => progreso[l.id] && progreso[l.id].test).length;
   if (vistas > 0) {
     document.getElementById('resumenProgreso').innerHTML =
-      'Tu progreso · <b>' + vistas + '</b> de ' + disponibles.length + ' lecciones vistas · <b>' + tests + '</b> tests hechos';
+      'Tu progreso · <b>' + vistas + '</b> de ' + LECCIONES.length + ' lecciones vistas · <b>' + tests + '</b> tests hechos';
   }
   if (siguiente && vistas > 0) {
     const boton = document.getElementById('botonEmpezar');
@@ -266,7 +263,7 @@
   // Cada chip enlaza a su lección (la interactiva o, si aún no está, la versión en texto)
   mapa.querySelectorAll('[data-leccion]').forEach(a => {
     const l = LECCIONES.find(x => x.num === a.dataset.leccion);
-    a.href = l.disponible ? l.url : l.md;
+    a.href = l.url;
     a.title = 'Lección ' + l.num + ': ' + l.titulo;
   });
 

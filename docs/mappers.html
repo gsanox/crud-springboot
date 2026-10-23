@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lección 03 · Mappers · SASE Formación</title>
+<meta name="description" content="Mappers en Spring Boot: convertir entidad y DTO en un único sitio, por qué actualizar no es crear, y cómo se prueban sin Spring.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/sase.css">
+<style>
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+.dos > * { min-width: 0; }
+@media (max-width: 860px) { .dos { grid-template-columns: 1fr; } }
+.card h3:first-child { margin-top: 0; }
+
+/* conversión campo a campo */
+.conversion { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 18px; margin-top: 22px; align-items: start; }
+@media (max-width: 900px) { .conversion { grid-template-columns: 1fr; } }
+.campos-mapa { display: grid; gap: 6px; }
+.campos-mapa .cab, .campos-mapa .f { display: grid; grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr); align-items: center; }
+.campos-mapa .cab { font: 500 .74rem var(--mono); color: var(--muted); padding: 0 4px 4px; }
+.campos-mapa .lado { border-radius: 8px; padding: 7px 10px; font: 400 .8rem var(--mono); overflow-wrap: anywhere; transition: background 160ms ease, box-shadow 160ms ease; }
+.campos-mapa .izq { background: var(--tint-model); }
+.campos-mapa .der { background: var(--tint-controller); }
+.campos-mapa .lado b { font-weight: 500; color: var(--blue); }
+.campos-mapa .lado.calc { background: #FDF1DD; }
+.campos-mapa .flecha-c { text-align: center; color: var(--muted); font: 500 1rem var(--mono); }
+.campos-mapa .f.activa .lado { box-shadow: 0 0 0 2px var(--teal); }
+.campos-mapa .f.activa .flecha-c { color: var(--teal); }
+.stock-ctrl { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+.stock-ctrl input[type="range"] { flex: 1; min-width: 160px; accent-color: var(--teal); }
+.stock-ctrl output { font: 500 .9rem var(--mono); color: var(--blue); min-width: 2.5em; }
+
+/* toEntity vs updateEntity */
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 18px; margin-top: 18px; align-items: start; }
+@media (max-width: 900px) { .lab { grid-template-columns: 1fr; } }
+.lab-izq, .lab-der { display: grid; gap: 14px; align-content: start; }
+.objeto { display: grid; gap: 4px; font: 400 .82rem var(--mono); }
+.objeto div { display: flex; justify-content: space-between; gap: 10px; padding: 4px 6px; border-radius: 6px; }
+.objeto b { font-weight: 500; color: var(--blue); }
+.objeto .nulo { background: #FBEDEB; }
+.objeto .nulo b { color: var(--error); }
+.objeto .cambia { background: #FDF1DD; }
+.objeto .intacto { background: #E2F0EF; }
+#labTabla { overflow-x: auto; }
+table.mini { font-size: .84rem; }
+table.mini th { background: var(--white); color: var(--muted); border-bottom: 1px solid var(--line); padding: 6px 8px; }
+table.mini td { padding: 6px 8px; }
+table.mini td.n { font-family: var(--mono); }
+table.mini tr.nueva td { background: #FBEDEB; }
+table.mini tr.cambiada td { background: #E2F0EF; }
+.sql-linea { font: 500 .82rem var(--mono); color: var(--blue); margin: 0; }
+.paso-texto .where { display: inline-block; font: 500 .7rem var(--mono); letter-spacing: 1.5px; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; margin-bottom: 8px; background: var(--tint-service); color: #2C667C; }
+.paso-texto.mal .where { background: #FBEDEB; color: var(--error); }
+.paso-texto.bien .where { background: #E2F0EF; color: #2A7574; }
+.paso-texto p { margin: 4px 0; }
+.peticion-put { font: 400 .8rem/1.55 var(--mono); white-space: pre; overflow-x: auto; margin: 0; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html" title="Índice de lecciones"><img src="sase_logo_rectangular.png" alt="SASE Formación"><span>Lección 03 · Mappers</span></a>
+    <nav class="nav" aria-label="Secciones">
+      <a href="#problema">El problema</a>
+      <a href="#solucion">La solución</a>
+      <a href="#campos">Campo a campo</a>
+      <a href="#actualizar">Actualizar ≠ crear</a>
+      <a href="#donde">Dónde y cómo</a>
+      <a href="#mapstruct">MapStruct</a>
+      <a href="#test">Autoevaluación</a>
+      <a href="#resumen">Resumen</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero-band">
+<div class="hero">
+  <div class="kicker">Lección 03 · Spring Boot · Proyecto CRUD de productos</div>
+  <h1>Mappers</h1>
+  <p class="lead">Qué es un mapper y por qué conviene tener la conversión entidad ↔ DTO en un solo sitio, las cuatro operaciones típicas, por qué actualizar no es lo mismo que crear y cómo se prueba sin Spring.</p>
+  <div class="callout key">
+    <strong>La idea en una frase</strong>
+    Una clase que solo convierte entre la entidad y sus DTOs, para que si cambia un campo haya un único sitio que tocar.
+  </div>
+</div>
+</div>
+
+<main>
+
+<!-- ================= PROBLEMA ================= -->
+<section id="problema">
+  <div class="kicker">01 · El problema</div>
+  <h2>Convertir en todas partes</h2>
+  <p class="lead">Con DTOs (lección 02) aparece un trabajo nuevo: <strong>pasar los datos de un objeto a otro</strong>. Sin un mapper, el mismo <code>new ProductoResponse(...)</code> se repetiría en cada método del servicio.</p>
+  <div class="code flotante" data-snippet="sinMapper"></div>
+  <p>Si mañana se añade un campo, o cambia cómo se calcula <code>disponible</code>, hay que acordarse de cambiarlo en <code>listar()</code>, <code>buscarPorId()</code>, <code>crear()</code>, <code>actualizar()</code> y <code>vender()</code>. Y en algún sitio se olvida.</p>
+</section>
+
+<!-- ================= SOLUCIÓN ================= -->
+<section id="solucion">
+  <div class="kicker">02 · La solución</div>
+  <h2>Una clase que solo convierte</h2>
+  <div class="dos">
+    <div class="code" data-snippet="mapper"></div>
+    <div>
+      <div class="table-wrap" style="margin-top:0">
+        <table>
+          <thead><tr><th>Método</th><th>De</th><th>A</th><th>Se usa en</th></tr></thead>
+          <tbody>
+            <tr><td><code>toEntity</code></td><td>Request</td><td>entidad nueva</td><td><code>crear()</code></td></tr>
+            <tr><td><code>updateEntity</code></td><td>Request</td><td>entidad que ya existe</td><td><code>actualizar()</code></td></tr>
+            <tr><td><code>toResponse</code></td><td>entidad</td><td>Response</td><td>todos los que devuelven un producto</td></tr>
+            <tr><td><code>toResponseList</code></td><td>lista de entidades</td><td>lista de Response</td><td><code>listar()</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:16px">Y el servicio queda limpio, sin detalles de conversión:</p>
+      <div class="code" data-snippet="usoServicio"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CAMPO A CAMPO ================= -->
+<section id="campos">
+  <div class="kicker">03 · Interactivo</div>
+  <h2><code>toResponse()</code>, campo a campo</h2>
+  <p class="lead">Pulsa <strong>Convertir</strong> para ver cómo se copia cada campo, y mueve el stock: <code>disponible</code> no se copia de ningún sitio, se <strong>calcula</strong> en el mapper.</p>
+  <div class="conversion">
+    <div class="card">
+      <div class="campos-mapa" id="camposMapa"></div>
+      <div class="stock-ctrl">
+        <label for="stock" class="campo" style="margin:0"><span>Stock de la entidad</span></label>
+        <input type="range" id="stock" min="0" max="20" value="10">
+        <output id="stockValor" for="stock">10</output>
+      </div>
+      <div class="controls" style="margin-bottom:0">
+        <button class="btn cta" type="button" id="convertir">Convertir →</button>
+      </div>
+    </div>
+    <div class="code" id="codigoCampos"></div>
+  </div>
+</section>
+
+<!-- ================= ACTUALIZAR ================= -->
+<section id="actualizar">
+  <div class="kicker">04 · Laboratorio</div>
+  <h2>Actualizar no es crear: <code>toEntity</code> contra <code>updateEntity</code></h2>
+  <p class="lead">Llega un <code>PUT /api/productos/7</code>. ¿Qué pasa si <code>actualizar()</code> usara <code>toEntity</code>, como al crear? Elige una versión y recórrela paso a paso.</p>
+
+  <div class="controls">
+    <button class="chip-btn" type="button" data-version="mal" aria-pressed="true"><span class="verb">✘</span> Con toEntity (mal)</button>
+    <button class="chip-btn" type="button" data-version="bien" aria-pressed="false"><span class="verb">✔</span> Con updateEntity (bien)</button>
+  </div>
+
+  <div class="lab">
+    <div class="lab-izq">
+      <div class="panel">
+        <h4>Petición</h4>
+        <pre class="peticion-put">PUT /api/productos/7
+{
+  "nombre": "Teclado RGB",
+  "descripcion": "Retroiluminado",
+  "precio": 59.99,
+  "stock": 8
+}</pre>
+      </div>
+      <div class="code" id="labCodigo"></div>
+      <div class="controls" style="margin:0">
+        <button class="btn" type="button" id="labAnterior">← Anterior</button>
+        <button class="btn cta" type="button" id="labSiguiente">Siguiente →</button>
+        <span class="step-count" id="labCuenta"></span>
+      </div>
+    </div>
+    <div class="lab-der">
+      <div class="panel paso-texto" id="labTexto" aria-live="polite"></div>
+      <div class="panel">
+        <h4><span>Objeto <code>Producto</code> en memoria</span></h4>
+        <div class="objeto" id="labObjeto"></div>
+      </div>
+      <div class="panel">
+        <h4>PostgreSQL <code>productos</code></h4>
+        <div id="labTabla"></div>
+        <p class="sql-linea" id="labSql"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= DÓNDE ================= -->
+<section id="donde">
+  <div class="kicker">05 · Detalles</div>
+  <h2>Dónde se llama, por qué <code>@Component</code> y cómo se prueba</h2>
+  <div class="ruta" style="grid-template-columns: max-content minmax(0,1fr) auto minmax(0,1.2fr) auto minmax(0,1fr)" role="img" aria-label="El servicio es la frontera: hacia el controlador salen DTOs y hacia el repositorio van entidades">
+    <div class="ruta-fila">
+      <span class="etq">Frontera</span>
+      <div class="paso" style="--c: var(--c-controller); --t: var(--tint-controller)">Controller<small>solo DTOs</small></div>
+      <div class="salto" style="color: var(--blue)">DTOs</div>
+      <div class="paso" style="--c: var(--c-service); --t: var(--tint-service)">Service + ProductoMapper<small>aquí se convierte</small></div>
+      <div class="salto" style="color: #2C667C">entidades</div>
+      <div class="paso" style="--c: var(--c-repository); --t: var(--tint-repository)">Repository<small>solo entidades</small></div>
+    </div>
+  </div>
+  <p>El mapper se llama en el <strong>servicio</strong>, que es la frontera. Si se mapeara en el controlador, la entidad tendría que salir del servicio, que es lo que queríamos evitar.</p>
+
+  <div class="dos">
+    <div class="card">
+      <h3>¿Por qué <code>@Component</code>?</h3>
+      <p>Para que Spring cree un <code>ProductoMapper</code> y lo <strong>inyecte</strong> en el servicio por el constructor, igual que el repositorio. <code>@Service</code>, <code>@Repository</code> y <code>@RestController</code> son variantes de <code>@Component</code> con un nombre que dice de qué capa son.</p>
+      <p>Muchos proyectos hacen el mapper con métodos <code>static</code> (<code>ProductoMapper.toResponse(p)</code>). También vale; con <code>@Component</code> sigue el mismo estilo que el resto de capas y se puede sustituir por un <em>mock</em> en los tests.</p>
+    </div>
+    <div class="card">
+      <h3><code>.stream().map(...).toList()</code></h3>
+      <p><code>toResponseList</code> convierte cada entidad con <code>toResponse</code> y junta los resultados en una lista nueva. Es lo mismo que este bucle, en una línea:</p>
+      <div class="code" data-snippet="bucle"></div>
+      <p style="margin-top:10px"><code>toList()</code> devuelve además una lista que <strong>no se puede modificar</strong>, cosa que viene bien para la caché (lección 05).</p>
+    </div>
+  </div>
+
+  <h3>Un mapper se prueba sin Spring</h3>
+  <p>Como solo transforma objetos, no necesita base de datos ni contexto de Spring: se crea con <code>new</code> y se prueba en milisegundos. <code>./mvnw test -Dtest=ProductoMapperTest</code></p>
+  <div class="code flotante" data-snippet="test"></div>
+</section>
+
+<!-- ================= MAPSTRUCT ================= -->
+<section id="mapstruct">
+  <div class="kicker">06 · Para saber más</div>
+  <h2>MapStruct: el mapper que se escribe solo</h2>
+  <p>Escribir mappers a mano es repetitivo con entidades grandes. <strong>MapStruct</strong> es una librería que genera el código del mapper al compilar, a partir de una interfaz. Copia los campos que se llaman igual, y con <code>@Mapping</code> se configuran los que no.</p>
+  <div class="code flotante" data-snippet="mapstruct"></div>
+  <p>En este proyecto el mapper está <strong>escrito a mano a propósito</strong>: así se ve exactamente qué hace, y cuando uses MapStruct sabrás qué código está generando por ti.</p>
+
+  <h3>Errores típicos</h3>
+  <div class="grid cols-2">
+    <div class="card"><b class="dont">Usar toEntity para actualizar.</b> Se pierde el <code>id</code> (se crea un producto nuevo) y la fecha de creación. Lo has visto en el laboratorio.</div>
+    <div class="card"><b class="dont">Poner lógica de negocio en el mapper</b> (comprobar stock, lanzar excepciones…). El mapper solo convierte. Un cálculo simple de presentación, como <code>disponible</code>, sí puede ir aquí.</div>
+    <div class="card"><b class="dont">Olvidar un campo</b> al añadirlo a la entidad y al DTO. El test del mapper es el que lo detecta.</div>
+    <div class="card"><b class="dont">Llamar al mapper desde el controlador</b> pasándole entidades: obliga a que la entidad salga del servicio.</div>
+  </div>
+</section>
+
+<!-- ================= TEST ================= -->
+<section id="test">
+  <div class="kicker">07 · Autoevaluación</div>
+  <h2>¿Lo has pillado? Comprueba</h2>
+  <p class="lead">Pulsa una respuesta. Si fallas, lee la explicación: es donde más se aprende. <span class="score" id="score"></span></p>
+  <div class="quiz" id="quiz"></div>
+</section>
+
+<!-- ================= RESUMEN ================= -->
+<section id="resumen" class="summary">
+  <div class="kicker">08 · Para repasar</div>
+  <h2>Si solo te quedas con 5 ideas</h2>
+  <div class="card">
+    <ol>
+      <li>Un <strong>mapper</strong> pone en un único sitio la conversión entre la entidad y sus DTOs.</li>
+      <li>Para <strong>crear</strong>, <code>toEntity</code>; para <strong>actualizar</strong>, cargar la entidad y <code>updateEntity</code>, que no toca el <code>id</code> ni la fecha.</li>
+      <li>Si el <code>id</code> es <code>null</code>, <code>save()</code> hace un <code>INSERT</code>; si no, un <code>UPDATE</code>.</li>
+      <li>Se llama en el <strong>servicio</strong>, que es la frontera: la entidad no sale de él.</li>
+      <li>Solo convierte, así que se prueba <strong>sin Spring</strong>. MapStruct puede generarlo, pero conviene saber qué hace por dentro.</li>
+    </ol>
+  </div>
+</section>
+
+<nav class="lesson-nav" id="lessonNav" aria-label="Lecciones"></nav>
+
+</main>
+
+<footer>Lecciones del proyecto <code>crud</code> (Spring Boot 4 · PostgreSQL) · DAM · DAW<br><a href="https://saseformacion.es">sase<span>_</span> Formación</a> · saseformacion.es</footer>
+
+<script src="assets/lecciones.js"></script>
+<script>
+/* ---------------- código real del proyecto ---------------- */
+const MAPPER = [
+  '@Component',
+  'public class ProductoMapper {',
+  '',
+  '    // DTO de entrada → entidad nueva (sin id ni fecha: los pone el servidor)',
+  '    public Producto toEntity(ProductoRequest request) {',
+  '        return new Producto(request.nombre(), request.descripcion(), request.precio(), request.stock());',
+  '    }',
+  '',
+  '    // Copia los datos del DTO sobre una entidad que ya existe (para actualizar)',
+  '    public void updateEntity(Producto producto, ProductoRequest request) {',
+  '        producto.setNombre(request.nombre());',
+  '        producto.setDescripcion(request.descripcion());',
+  '        producto.setPrecio(request.precio());',
+  '        producto.setStock(request.stock());',
+  '    }',
+  '',
+  '    // Entidad → DTO de salida',
+  '    public ProductoResponse toResponse(Producto producto) {',
+  '        return new ProductoResponse(',
+  '                producto.getId(),',
+  '                producto.getNombre(),',
+  '                producto.getDescripcion(),',
+  '                producto.getPrecio(),',
+  '                producto.getStock(),',
+  '                producto.getStock() > 0,',
+  '                producto.getFechaCreacion());',
+  '    }',
+  '',
+  '    public List<ProductoResponse> toResponseList(List<Producto> productos) {',
+  '        return productos.stream()',
+  '                .map(this::toResponse)',
+  '                .toList();',
+  '    }',
+  '}'];
+const SNIPPETS = {
+  sinMapper: { file: 'Sin mapper (NO es el código del proyecto)', hl: [2, 3, 9, 10], lines: [
+    'public ProductoResponse buscarPorId(Long id) {',
+    '    Producto p = obtenerProducto(id);',
+    '    return new ProductoResponse(p.getId(), p.getNombre(), p.getDescripcion(),',
+    '            p.getPrecio(), p.getStock(), p.getStock() > 0, p.getFechaCreacion());',
+    '}',
+    '',
+    'public ProductoResponse crear(ProductoRequest request) {',
+    '    Producto p = new Producto(request.nombre(), request.descripcion(), request.precio(), request.stock());',
+    '    // ...',
+    '    return new ProductoResponse(p.getId(), p.getNombre(), p.getDescripcion(),   // ← otra vez',
+    '            p.getPrecio(), p.getStock(), p.getStock() > 0, p.getFechaCreacion());',
+    '}',
+    '// ... y lo mismo en listar(), actualizar() y vender()'] },
+  mapper: { file: 'mapper/ProductoMapper.java', hl: [0, 4, 9, 17, 28], lines: MAPPER },
+  usoServicio: { file: 'service/ProductoService.java', hl: [4], lines: [
+    '@Cacheable(value = CacheConfig.PRODUCTO_POR_ID, key = "#id")',
+    '@Transactional(readOnly = true)',
+    'public ProductoResponse buscarPorId(Long id) {',
+    '    log.info("Consultando la base de datos: producto {}", id);',
+    '    return productoMapper.toResponse(obtenerProducto(id));',
+    '}'] },
+  bucle: { file: 'Equivalente con un bucle', hl: [], lines: [
+    'List<ProductoResponse> resultado = new ArrayList<>();',
+    'for (Producto p : productos) {',
+    '    resultado.add(toResponse(p));',
+    '}'] },
+  test: { file: 'test/.../mapper/ProductoMapperTest.java', hl: [3, 13, 14], lines: [
+    '// Test unitario puro: sin Spring ni base de datos, el mapper se crea con new',
+    'class ProductoMapperTest {',
+    '',
+    '    private final ProductoMapper mapper = new ProductoMapper();',
+    '',
+    '    @Test',
+    '    void updateEntityNoTocaElIdNiLaFecha() {',
+    '        Producto producto = new Producto("Ratón", null, new BigDecimal("19.90"), 5);',
+    '        producto.setId(3L);',
+    '        LocalDateTime fecha = LocalDateTime.of(2026, 10, 23, 10, 0);',
+    '        producto.setFechaCreacion(fecha);',
+    '',
+    '        mapper.updateEntity(producto, new ProductoRequest("Ratón inalámbrico", "Bluetooth", new BigDecimal("24.90"), 2));',
+    '',
+    '        assertEquals(3L, producto.getId());',
+    '        assertEquals(fecha, producto.getFechaCreacion());',
+    '        assertEquals("Ratón inalámbrico", producto.getNombre());',
+    '        assertEquals(2, producto.getStock());',
+    '    }',
+    '}'] },
+  mapstruct: { file: 'Ejemplo con MapStruct (NO se usa en este proyecto)', hl: [0, 3, 4], lines: [
+    '@Mapper(componentModel = "spring")',
+    'public interface ProductoMapper {',
+    '',
+    '    @Mapping(target = "disponible", expression = "java(producto.getStock() > 0)")',
+    '    ProductoResponse toResponse(Producto producto);   // MapStruct escribe el código al compilar',
+    '}'] }
+};
+document.querySelectorAll('[data-snippet]').forEach(el => {
+  const s = SNIPPETS[el.dataset.snippet];
+  renderCode(el, s.file, s.lines, s.hl);
+});
+
+/* ---------------- toResponse campo a campo ---------------- */
+(function () {
+  const $ = id => document.getElementById(id);
+  const ent = { id: 7, nombre: 'Teclado', descripcion: 'Teclado mecánico', precio: '49.99', stock: 10, fechaCreacion: '2026-10-23T10:00' };
+  // [campo de la entidad, campo del DTO, línea de toResponse en MAPPER]
+  const FILAS = [['id', 'id', 19], ['nombre', 'nombre', 20], ['descripcion', 'descripcion', 21], ['precio', 'precio', 22],
+    ['stock', 'stock', 23], ['stock > 0', 'disponible', 24], ['fechaCreacion', 'fechaCreacion', 25]];
+  let timer = null;
+
+  function valor(campo) {
+    if (campo === 'stock > 0') return ent.stock + ' > 0';
+    return typeof ent[campo] === 'string' && campo !== 'precio' ? '"' + ent[campo] + '"' : ent[campo];
+  }
+  function valorDto(campoDto) {
+    if (campoDto === 'disponible') return String(ent.stock > 0);
+    return valor(campoDto);
+  }
+
+  function pintar(activa, hechas) {
+    const m = $('camposMapa');
+    m.innerHTML = '<div class="cab"><span>Producto (entidad)</span><span></span><span>ProductoResponse</span></div>';
+    FILAS.forEach(([e, d], k) => {
+      const f = document.createElement('div');
+      f.className = 'f' + (k === activa ? ' activa' : '');
+      const izq = document.createElement('div');
+      izq.className = 'lado izq' + (d === 'disponible' ? ' calc' : '');
+      izq.innerHTML = '<b>' + (d === 'disponible' ? 'calcula' : e) + '</b> ' + valor(e);
+      const fl = document.createElement('div');
+      fl.className = 'flecha-c';
+      fl.textContent = '→';
+      const der = document.createElement('div');
+      der.className = 'lado der';
+      der.innerHTML = k < hechas ? '<b>' + d + '</b> ' + valorDto(d) : '<b>' + d + '</b> <span class="vacio">…</span>';
+      f.append(izq, fl, der);
+      m.appendChild(f);
+    });
+  }
+
+  function convertir() {
+    clearInterval(timer);
+    let k = 0;
+    const paso = () => {
+      pintar(k, k + 1);
+      renderCode($('codigoCampos'), 'mapper/ProductoMapper.java · toResponse()', MAPPER.slice(16, 27), [FILAS[k][2] - 16]);
+      k++;
+      if (k >= FILAS.length) { clearInterval(timer); setTimeout(() => pintar(-1, FILAS.length), 700); }
+    };
+    paso();
+    timer = setInterval(paso, 650);
+  }
+
+  $('stock').addEventListener('input', () => {
+    ent.stock = parseInt($('stock').value, 10);
+    $('stockValor').textContent = ent.stock;
+    clearInterval(timer);
+    pintar(5, FILAS.length);
+    renderCode($('codigoCampos'), 'mapper/ProductoMapper.java · toResponse()', MAPPER.slice(16, 27), [8]);
+  });
+  $('convertir').addEventListener('click', convertir);
+  pintar(-1, 0);
+  renderCode($('codigoCampos'), 'mapper/ProductoMapper.java · toResponse()', MAPPER.slice(16, 27), [1]);
+})();
+
+/* ---------------- toEntity contra updateEntity ---------------- */
+(function () {
+  const $ = id => document.getElementById(id);
+  const ORIGINAL = { id: 7, nombre: 'Teclado', descripcion: 'Teclado mecánico', precio: '49.99', stock: 10, fechaCreacion: '2026-10-23T10:00' };
+  const PETICION = { nombre: 'Teclado RGB', descripcion: 'Retroiluminado', precio: '59.99', stock: 8 };
+  const CODIGO = {
+    mal: { file: 'actualizar() con toEntity (NO es el código del proyecto)', lines: [
+      'public ProductoResponse actualizar(Long id, ProductoRequest request) {',
+      '    Producto producto = productoMapper.toEntity(request);   // ✘ entidad nueva',
+      '    return productoMapper.toResponse(productoRepository.save(producto));',
+      '}'] },
+    bien: { file: 'service/ProductoService.java · actualizar() (resumido)', lines: [
+      'public ProductoResponse actualizar(Long id, ProductoRequest request) {',
+      '    Producto producto = obtenerProducto(id);                // entidad con id y fecha',
+      '    // (aquí va la regla del nombre único, lección 01)',
+      '    productoMapper.updateEntity(producto, request);          // solo cambia 4 campos',
+      '    return productoMapper.toResponse(productoRepository.save(producto));',
+      '}'] }
+  };
+  const nueva = Object.assign({ id: null, fechaCreacion: null }, PETICION);
+  const editada = Object.assign({}, ORIGINAL, PETICION);
+  const PASOS = {
+    mal: [
+      { hl: [0], obj: null, filas: [ORIGINAL], sql: '',
+        texto: '<p>Llega la petición para cambiar el producto <strong>7</strong>. Esta versión hace lo mismo que <code>crear()</code>: convertir el DTO en una entidad con <code>toEntity</code>.</p>' },
+      { hl: [1], obj: { datos: nueva, marca: { id: 'nulo', fechaCreacion: 'nulo' } }, filas: [ORIGINAL], sql: '',
+        texto: '<p><code>toEntity</code> crea una entidad <strong>nueva</strong> con lo que trae el DTO. El DTO no tiene <code>id</code> ni <code>fechaCreacion</code>, así que quedan a <code>null</code>.</p>' },
+      { hl: [2], obj: { datos: nueva, marca: { id: 'nulo', fechaCreacion: 'nulo' } }, filas: [ORIGINAL, Object.assign({}, nueva, { id: 9 })], nueva: 9,
+        sql: 'insert into productos (descripcion, fecha_creacion, nombre, precio, stock) values (...)',
+        texto: '<p><code>save()</code> ve <code>id = null</code> y entiende que es un producto nuevo: hace un <strong>INSERT</strong>. Ahora hay <strong>dos</strong> productos, y el nuevo no tiene fecha de creación.</p>' },
+      { hl: [2], obj: { datos: Object.assign({}, nueva, { id: 9 }), marca: { fechaCreacion: 'nulo' } }, filas: [ORIGINAL, Object.assign({}, nueva, { id: 9 })], nueva: 9, sql: 'insert into productos (...)', final: 'mal',
+        texto: '<p>El cliente pidió cambiar el <strong>7</strong> y recibe un 200 con el <strong>9</strong>. El 7 sigue igual. Encima, la regla del nombre único ni se ha comprobado.</p>' }
+    ],
+    bien: [
+      { hl: [0], obj: null, filas: [ORIGINAL], sql: '',
+        texto: '<p>Llega la petición para cambiar el producto <strong>7</strong>. Esta es la versión del proyecto.</p>' },
+      { hl: [1], obj: { datos: ORIGINAL, marca: { id: 'intacto', fechaCreacion: 'intacto' } }, filas: [ORIGINAL], sql: 'select ... from productos where id = 7',
+        texto: '<p>Primero se <strong>carga la entidad</strong> de la base de datos con <code>obtenerProducto(7)</code> (o 404 si no existe). Ya tiene su <code>id</code> y su <code>fechaCreacion</code>.</p>' },
+      { hl: [3], obj: { datos: editada, marca: { id: 'intacto', fechaCreacion: 'intacto', nombre: 'cambia', descripcion: 'cambia', precio: 'cambia', stock: 'cambia' } }, filas: [ORIGINAL], sql: 'select ... from productos where id = 7',
+        texto: '<p><code>updateEntity</code> <strong>copia encima</strong> solo los cuatro campos del DTO. El <code>id</code> y la fecha no se tocan.</p>' },
+      { hl: [4], obj: { datos: editada, marca: { id: 'intacto', fechaCreacion: 'intacto' } }, filas: [editada], cambiada: 7, sql: 'update productos set descripcion=?, nombre=?, precio=?, stock=? where id = 7', final: 'bien',
+        texto: '<p><code>save()</code> ve <code>id = 7</code>: hace un <strong>UPDATE</strong> de esa fila. Sigue habiendo un solo producto, con sus datos nuevos y su fecha de siempre. El cliente recibe el 7 actualizado.</p>' }
+    ]
+  };
+  let version = 'mal', i = 0;
+
+  function pintarObjeto(o) {
+    const box = $('labObjeto');
+    box.innerHTML = '';
+    if (!o) { box.innerHTML = '<p class="vacio" style="margin:0">Todavía no hay ningún objeto.</p>'; return; }
+    ['id', 'nombre', 'descripcion', 'precio', 'stock', 'fechaCreacion'].forEach(k => {
+      const d = document.createElement('div');
+      const m = o.marca[k];
+      if (m) d.className = m;
+      const a = document.createElement('span'); a.textContent = k;
+      const b = document.createElement('b'); b.textContent = o.datos[k] === null ? 'null' : o.datos[k];
+      d.append(a, b);
+      box.appendChild(d);
+    });
+  }
+
+  function pintarTabla(p) {
+    const t = document.createElement('table');
+    t.className = 'mini';
+    t.innerHTML = '<thead><tr><th>id</th><th>nombre</th><th>precio</th><th>stock</th><th>fecha_creacion</th></tr></thead>';
+    const tb = document.createElement('tbody');
+    p.filas.forEach(f => {
+      const tr = document.createElement('tr');
+      if (p.nueva === f.id) tr.className = 'nueva destello';
+      if (p.cambiada === f.id) tr.className = 'cambiada destello';
+      [f.id, f.nombre, f.precio, f.stock, f.fechaCreacion === null ? 'null' : f.fechaCreacion].forEach((x, k) => {
+        const td = document.createElement('td');
+        td.textContent = x;
+        if (k !== 1) td.className = 'n';
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    $('labTabla').innerHTML = '';
+    $('labTabla').appendChild(t);
+    $('labSql').textContent = p.sql ? 'Hibernate: ' + p.sql : '';
+  }
+
+  function ir(n) {
+    const pasos = PASOS[version];
+    i = Math.max(0, Math.min(n, pasos.length - 1));
+    const p = pasos[i];
+    renderCode($('labCodigo'), CODIGO[version].file, CODIGO[version].lines, p.hl);
+    const texto = $('labTexto');
+    texto.className = 'panel paso-texto' + (p.final ? ' ' + p.final : '');
+    texto.innerHTML = '<span class="where">' + (p.final === 'mal' ? 'Resultado: se ha duplicado' : p.final === 'bien' ? 'Resultado: correcto' : 'Paso ' + (i + 1) + ' de ' + pasos.length) + '</span>' + p.texto;
+    pintarObjeto(p.obj);
+    pintarTabla(p);
+    $('labCuenta').textContent = (i + 1) + ' / ' + pasos.length;
+    $('labAnterior').disabled = i === 0;
+    $('labSiguiente').disabled = i === pasos.length - 1;
+  }
+
+  document.querySelectorAll('[data-version]').forEach(b => b.addEventListener('click', () => {
+    version = b.dataset.version;
+    document.querySelectorAll('[data-version]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    ir(0);
+  }));
+  $('labAnterior').addEventListener('click', () => ir(i - 1));
+  $('labSiguiente').addEventListener('click', () => ir(i + 1));
+  ir(0);
+})();
+
+/* ---------------- autoevaluación ---------------- */
+crearTest([
+  { q: 'Añades el campo categoria a la entidad y a los dos DTOs. Con mapper, ¿qué más hay que tocar para que viaje en las respuestas?',
+    opts: ['Todos los métodos del servicio', 'Solo el mapper', 'El controlador', 'Nada: se copia solo'], ok: 1,
+    why: 'Toda la conversión vive en ProductoMapper (toEntity, updateEntity y toResponse). Sin mapper habría que tocar cada método del servicio que construye un DTO.' },
+  { q: 'actualizar() hace productoRepository.save(productoMapper.toEntity(request)). ¿Qué pasa?',
+    opts: ['Actualiza el producto bien', 'La entidad tiene id null, así que save() hace un INSERT: se crea otro producto sin fecha de creación', 'Lanza una excepción', 'Borra el producto'], ok: 1,
+    why: 'toEntity crea una entidad nueva sin id ni fecha. Para Hibernate, id null significa «nuevo».' },
+  { q: '¿Cómo decide save() si hace INSERT o UPDATE?',
+    opts: ['Por el nombre del método del servicio', 'Por si el id de la entidad es null o no', 'Por el verbo HTTP de la petición', 'Siempre hace UPDATE'], ok: 1,
+    why: 'Con id null la entidad es nueva (INSERT); con id, se actualiza esa fila (UPDATE).' },
+  { q: '¿Por qué el test del mapper no lleva @SpringBootTest?',
+    opts: ['Porque se olvidó', 'Porque el mapper no depende de Spring ni de la base de datos: se crea con new', 'Porque los mappers no se pueden probar', 'Porque @SpringBootTest solo sirve para controladores'], ok: 1,
+    why: 'Un test sin Spring es más rápido y más sencillo. Solo hace falta el contexto de Spring cuando se prueba algo que depende de él.' },
+  { q: '¿Desde dónde se llama al mapper?',
+    opts: ['Desde el controlador', 'Desde el servicio, que es la frontera entre DTOs y entidades', 'Desde el repositorio', 'Desde la entidad'], ok: 1,
+    why: 'Si el controlador mapeara, la entidad tendría que salir del servicio.' },
+  { q: '¿Qué hace el mapper con disponible?',
+    opts: ['Lo copia de la entidad', 'Lo calcula: stock > 0', 'Lo lee de la base de datos', 'Lo envía el cliente'], ok: 1,
+    why: 'disponible no existe en la tabla ni en la entidad: es un campo de presentación que se calcula al construir el DTO.' },
+  { q: '¿Qué NO debería hacer un mapper?',
+    opts: ['Copiar campos entre objetos', 'Calcular un campo de presentación como disponible', 'Comprobar si hay stock suficiente y lanzar una excepción', 'Convertir una lista'], ok: 2,
+    why: 'Las reglas de negocio van en el servicio. El mapper solo convierte.' },
+  { q: '¿Qué es MapStruct?',
+    opts: ['Una base de datos', 'Una librería que genera el código del mapper al compilar a partir de una interfaz', 'Una anotación de Spring', 'El nombre del patrón DTO'], ok: 1,
+    why: 'Copia sola los campos que se llaman igual y se configura con @Mapping para el resto. Aquí el mapper se escribe a mano para ver qué hace.' }
+], { quiz: document.getElementById('quiz'), score: document.getElementById('score'), leccion: 'mappers' });
+
+iniciarLeccion('mappers');
+</script>
+</body>
+</html>

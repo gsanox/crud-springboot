@@ -35,6 +35,7 @@ build/
 ### Fuera del repositorio ###
 .DS_Store
 NOTAS.md
+notas/
 CLAUDE.md
 .github/*
 !.github/workflows/
